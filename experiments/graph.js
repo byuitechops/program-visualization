@@ -29,7 +29,7 @@ function update(){
   
   // Update elements with the new calculations
   var enteringNodes = _nodes.enter().append('g')
-      .attr('data-id',d => d.id)
+    .attr('data-id',d => d.id)
   enteringNodes.append('rect')
     .attr('width',d => d.width)
     .attr('height',d => d.height)
@@ -38,25 +38,25 @@ function update(){
     .attr('y',d => d.height/2)
     .text(d => d.label)
   enteringNodes
-    .merge(_nodes)
-      .attr('transform',d => `translate(${[d.x-d.width/2,d.y-d.height/2]})`)
-      .on('mouseover', function(d){
-        d3.select(this).classed('highlight',true)
-      })
-      .on('mouseout', function(d){
-        d3.select(this).classed('highlight',false)
-      })
+  .merge(_nodes)
+    .attr('transform',d => `translate(${[d.x-d.width/2,d.y-d.height/2]})`)
+    .on('mouseover', function(d){
+      d3.select(this).classed('highlight',true)
+    })
+    .on('mouseout', function(d){
+      d3.select(this).classed('highlight',false)
+    })
   _nodes.exit().remove() 
 
   _edges.enter().append('path')
-      .attr('data-source',d => d.source)
-      .attr('data-target',d => d.target)
-    .merge(_edges)
-      .attr('d',d => {
-        var s = Graph.node(d.source)
-        var t = Graph.node(d.target)
-        return describeLine(s.x+s.width/2,s.y,t.x-t.width/2,t.y)
-      })
+    .attr('data-source',d => d.source)
+    .attr('data-target',d => d.target)
+  .merge(_edges)
+    .attr('d',d => {
+      var s = Graph.node(d.source)
+      var t = Graph.node(d.target)
+      return describeLine(s.x+s.width/2,s.y,t.x-t.width/2,t.y)
+    })
   _edges.exit().remove() 
 
   svg
