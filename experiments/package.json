@@ -4,7 +4,8 @@
   "description": "",
   "main": "create-req-tree.js",
   "dependencies": {
-    "@dagrejs/graphlib": "^2.1.4"
+    "@dagrejs/graphlib": "^2.1.4",
+    "deep-equal": "^1.0.1"
   },
   "devDependencies": {},
   "scripts": {

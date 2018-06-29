@@ -79,14 +79,14 @@ function normalize(root,index=0,a=[root]){
     }
   
     // [A] -> A
-    if(root.length <= 1){   
+    if(root.length == 1){
       console.log('Single/',root.toString(),root[0].toString(),'/Single')
       a[index] = root[0]
       root = a[index]
       changed = true
     }
   } while(changed)
-  return a[index]
+  return a[index] || []
 }
 
 function simplify(root,index=0,a=[root]){
@@ -101,6 +101,16 @@ function simplify(root,index=0,a=[root]){
     a[index] = root
     
     let grandchildren = new Map()
+    
+    // [[]] -> []
+    for(let i = 0; i < root.length; i++){
+      if(root[i].op && root[i].length == 0){
+        root.splice(i--,1)
+        changed = true
+      }
+    }
+    if(changed) continue;
+
     for(let i = 0; i < root.length; i++){
       if(root[i].op){
         root[i].forEach((grandchild,j) => {
@@ -112,6 +122,7 @@ function simplify(root,index=0,a=[root]){
         })
       }
     }
+
     
     // [[A B]+ A]* -> [A]*
     for(let i = 0; i < root.length; i++){
@@ -149,7 +160,7 @@ if(DEBUG){
   // var node = AND('ACCTG202',OR(AND('B215','B302'),AND('B215','B301'),OR('ACCTG301','ECON255')))
   // var node = AND(AND('ECON151','FDENG101'),OR('AGBUS201','ECON150'),OR('ECON271','MATH221A'))
   // var node = OR(AND('A','B','C'),AND('B','C','D'),AND('D','E'))
-  var node = OR(AND('A','B'),AND('B','C'),AND('C','D'),AND('D','A'))
+  // var node = OR(AND('A','B'),AND('B','C'),AND('C','D'),AND('D','A'))
   console.log('start',node.toString())
   console.log('final',simplify(node).toString())
 }
