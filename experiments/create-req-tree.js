@@ -1,4 +1,4 @@
-const courses = require('./courses')
+const courses = require('../courses')
 const { Graph,alg } = require('@dagrejs/graphlib')
 
 function stringify(tree){
@@ -52,5 +52,6 @@ Object.keys(courses).forEach(c => addCourse(reqs,c))
 // console.log(reqs.edges())
 // console.log(alg.components(reqs))
 // console.log(reqs.inEdges('[[ACCTG 201 ACCTG 202 ACCTG 301 ECON 150 ECON 151]* [ACCTG 201 ACCTG 202 ECON 150 ECON 151 ECON 215 FDMAT 112]* [ACCTG 201 ACCTG 202 ECON 150 ECON 151 ECON 215 MATH 119]* [ACCTG 201 ECON 150 ECON 151 ECON 215]* [B 301 B 321 B 341 B 361]* [B 302 B 322 B 342]*]+'))
-console.log(reqs.nodes().filter(n => n.length > 100).map(n => reqs.inEdges(n)))
+// console.log(reqs.nodes().filter(n => n.length > 100).map(n => reqs.inEdges(n)))
+console.log(alg.findCycles(reqs))
 console.log('nodes:',reqs.nodeCount(),'edges:',reqs.edgeCount())
