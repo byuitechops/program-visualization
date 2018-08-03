@@ -1,16 +1,3 @@
-// var rank = {
-//   _nums:[0,0,0],
-//   get major(){ return _nums[0] },
-//   get minor(){ return _nums[1] },
-//   get patch(){ return _nums[2] },
-//   set major(val){
-//     this._nums = [val,0,0]
-//   },
-//   set minor(val){
-//     this._nums.splice(1,this._nums.length,)
-//   }
-// }
-
 var util = require('util')
 
 var handler = {
@@ -34,6 +21,8 @@ var handler = {
 
 function create(nums=[]){
   nums[util.inspect.custom] = function(){ return '['+this.join('.')+']' }
+  nums.valueOf = function(){ return this.join('.') }
+  nums.equals = function(other){ return this.valueOf() == other.valueOf() }
   nums.add = function(other){ return reduceRight(this,other,(a,b) => a+b,this) }
   nums.subtract = function(other){ return reduceRight(this,other,(a,b) => a-b,this) }
   nums.diff = function(other){ return reduceRight(this,other,(a,b) => Math.abs(a-b),this) }
@@ -58,7 +47,9 @@ module.exports = create
 module.exports.diff = (a,b) => reduce(a,b,(a,b) => Math.abs(a-b))
 module.exports.add = (a,b) => reduce(a,b,(a,b) => a+b)
 module.exports.subtract = (a,b) => reduce(a,b,(a,b) => a-b)
+module.exports.equals = (a,b) =>  a.valueOf() == b.valueOf()
 
 var num = create([1,0,3])
-console.log(create([1,0,1]).diff(create([0,1,1])))
+// console.log(create([1,0,1]).diff(create([0,1,1])))
+// console.log(create([1,0,1]).equals(create([1,0,1])))
 // console.log(module.exports.add(create([1,0,1]),create([0,1,1])))
