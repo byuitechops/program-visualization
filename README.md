@@ -6,7 +6,9 @@ An attempt to visualize an entire program (degree logic, requisite logic, catalo
 ### proof of concepts
 [Drawing a line with round corners](/experiments/arc.html)
 
-[Raw placement of courses](/experiments/graph.html)
+[Raw placement of courses](/copout/index.html)
+
+[Prideful Failure](/experiments/failure.2.html)
 
 ## Use Cases
 
