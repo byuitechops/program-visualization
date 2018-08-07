@@ -1,0 +1,115 @@
+<html>
+  <head>
+    <style
+      g.type-TK > rect {
+        fill: #00ffd0;
+      }
+
+      text {
+        font-weight: 300;
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serf;
+        font-size: 14px;
+        text-anchor: middle;
+        dominant-baseline:middle;
+      }
+
+      .node rect {
+        stroke: #999;
+        fill: #fff;
+        stroke-width: 1.5px;
+      }
+
+      .edges path {
+        stroke: #333;
+        stroke-width: 1.5px;
+      }
+    </style>
+    <script src="req-tree.js"></script>
+    <script src="https://d3js.org/d3.v4.min.js" charset="utf-8"></script>
+    <script src="https://dagrejs.github.io/project/dagre/latest/dagre.min.js"></script>
+  </head>
+  <body>
+    <script>
+      const svg = d3.select('body').append('svg')
+      const $nodes = svg.append('g').classed('nodes',true)
+      const $edges = svg.append('g').classed('edges',true)
+
+      // Create the input graph
+      const g = dagre.graphlib.json.read(reqTree)
+        .setGraph({
+          rankdir:'LR',
+          nodesep:5,
+          edgesep:0,
+          ranksep:50,
+          marginx:50,
+        })
+      g.nodes().forEach(n => {
+        g.node(n).width = 100
+        g.node(n).height = 20
+      })
+
+      function layout(){
+        var clone = new dagre.graphlib.Graph(g.graph())
+        g.nodes()
+          .forEach(n => {
+            if(g.node(n).type == 'course'){
+              g.predecessors(n).filter(pre => g.node(pre).type == 'course').forEach(pre => clone.setEdge(pre,n,{}))
+              g.successors(n).filter(suc => g.node(suc).type == 'course').forEach(suc => clone.setEdge(n,suc,{}))
+              clone.setNode(n,g.node(n))
+            } else {
+              g.predecessors(n).forEach(pre => g.successors(n).forEach(suc => clone.setEdge(pre,suc,{})))
+            }
+          })
+        dagre.layout(clone)
+      }
+
+      function render(){
+        // Create Joined Data selections
+        var _nodes = $nodes.selectAll('g')
+          .data(g.nodes(),function(d){ return d ? d : this.getAttribute('data-id') })
+        var _edges = $edges.selectAll('path')
+          .data(g.edges(),function(d){ return d ? d.v+'-'+d.w : this.getAttribute('data-source')+'-'+this.getAttribute('data-target') })
+        
+        // Update elements with the new calculations
+        var enteringNodes = _nodes.enter().append('g')
+          .attr('data-id',d => d)
+        enteringNodes.append('rect')
+          .attr('width',d => g.node(d).width)
+          .attr('height',d => g.node(d).height)
+        enteringNodes.append('text')
+          .attr('x',d => g.node(d).width/2)
+          .attr('y',d => g.node(d).height/2)
+          .text(d => g.node(d).type == 'course' ? d : '')
+        enteringNodes
+        .merge(_nodes)
+          .attr('transform',d => `translate(${[g.node(d).x-g.node(d).width,g.node(d).y-g.node(d).height/2]})`)
+        _nodes.exit().remove()
+
+        _edges.enter().append('path')
+          .attr('data-source',d => d.v)
+          .attr('data-target',d => d.w)
+        .merge(_edges)
+          .attr('d',d => {
+            var s = g.node(d.v)
+            var t = g.node(d.w)
+            // return describeLine(s.x,s.y,t.x,t.y)
+            return [
+              'M',s.x,s.y,
+              'L',t.x-t.width,t.y,
+            ].join(' ')
+          })
+        _edges.exit().remove()
+
+        svg
+          .attr('width',g.graph().width)
+          .attr('height',g.graph().height)
+      }
+      
+      layout()
+      render()
+    </script>
+  </body>
+</html>
+
+
+<script src="https://d3js.org/d3.v4.min.js" charset="utf-8"></script>

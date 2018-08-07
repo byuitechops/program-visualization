@@ -1,5 +1,3 @@
-const util = require('util')
-
 function firstIndexNotSame(A,B,compare){
   if(A.length !== B.length){
     throw new Error('Arrays are not the same length')
@@ -35,7 +33,6 @@ class Rank extends Array {
   }
   valueOf(){ return '['+this.join('.')+']' }
   toString(){ return this.valueOf() }
-  [util.inspect.custom](){ return this.valueOf() }
   increment(level){
     if(level >= this.deepness){
       throw new Error('Ain\'t have enough layers for that')
@@ -93,8 +90,6 @@ function testing(){
   console.log(l)
   console.log([...l.loop(int)])
 }
-
-module.exports = Levels
 
 // var i = 0
 // var path = [0,0,0]

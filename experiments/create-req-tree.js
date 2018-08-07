@@ -10,12 +10,12 @@ function logicify(tree){
 
 function addEdge(graph,parent,logexp,type){
   if(typeof logexp == 'string'){
-    graph.setEdge(parent,logexp,{type:type})
+    graph.setEdge(logexp,parent,{type:type})
     addCourse(graph,logexp)
   } else if(Array.isArray(logexp)){
     var key = logexp.toString()
     graph.setNode(key,{type:'logic',logexp:logexp})
-    graph.setEdge(parent,key,{type:type})
+    graph.setEdge(key,parent,{type:type})
     logexp.forEach(sub => addEdge(graph,key,sub,type))
   } else {
     console.error(parent,'Req did not have a .course or .sub')
@@ -90,5 +90,5 @@ const reqs = new graphlib.Graph();
 // console.log(reqs.nodes().filter(n => n.length > 100).map(n => reqs.inEdges(n)))
 console.log('nodes:',reqs.nodeCount(),'edges:',reqs.edgeCount())
 
-fs.writeFileSync('req-tree.js','var reqTree = '+JSON.stringify(graphlib.json.write(reqs)));
+fs.writeFileSync('../../serious/req-tree.json',JSON.stringify(graphlib.json.write(reqs)));
 // BAD: B458 B478 MUSIC158A
