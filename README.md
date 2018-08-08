@@ -46,3 +46,7 @@ An attempt to visualize an entire program (degree logic, requisite logic, catalo
 - Repeatable courses
 - Hidden requisites
 - 120 credit limit
+- Equivalent Courses?
+
+# Questions
+Do concurrent requisites ever have Or's?
