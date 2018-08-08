@@ -1,10 +1,6 @@
 <html>
   <head>
-    <style
-      g.type-TK > rect {
-        fill: #00ffd0;
-      }
-
+    <style>
       text {
         font-weight: 300;
         font-family: "Helvetica Neue", Helvetica, Arial, sans-serf;
@@ -13,15 +9,32 @@
         dominant-baseline:middle;
       }
 
-      .node rect {
-        stroke: #999;
-        fill: #fff;
-        stroke-width: 1.5px;
+      .nodes rect {
+        fill:red; /* Color for Error */
+      }
+
+      .nodes g[data-type="group"] rect {
+        stroke:purple;
+        stroke-width:2px;
+        fill:none;
+      }
+      
+      .nodes g[data-type="course"] rect {
+        fill:#00ffd0;
       }
 
       .edges path {
-        stroke: #333;
+        stroke:red; /* Color for Error */
         stroke-width: 1.5px;
+      }
+      .edges path[data-type="pre"]{
+        stroke: #333;
+      }
+      .edges path[data-type="co"]{
+        stroke: orange;
+      }
+      .edges path[data-type="concur"]{
+        stroke: purple;
       }
     </style>
     <script src="req-tree.js"></script>
@@ -42,27 +55,117 @@
           edgesep:0,
           ranksep:50,
           marginx:50,
+          nwidth:100,
+          nheight:20,
         })
+
+      var comp = dagre.graphlib.alg.components(g).reduce((longest,n) => n.length>longest.length?n:longest)
+      g.nodes().filter(n => !comp.includes(n)).forEach(n => g.removeNode(n))
       g.nodes().forEach(n => {
-        g.node(n).width = 100
-        g.node(n).height = 20
+        if(g.node(n).type == 'course'){
+          g.node(n).width = g.graph().nwidth
+          g.node(n).height = g.graph().nheight
+        } else {
+          g.node(n).width = 0
+          g.node(n).height = 0
+        }
       })
 
-      function layout(){
-        var clone = new dagre.graphlib.Graph(g.graph())
-        g.nodes()
-          .forEach(n => {
-            if(g.node(n).type == 'course'){
-              g.predecessors(n).filter(pre => g.node(pre).type == 'course').forEach(pre => clone.setEdge(pre,n,{}))
-              g.successors(n).filter(suc => g.node(suc).type == 'course').forEach(suc => clone.setEdge(n,suc,{}))
-              clone.setNode(n,g.node(n))
-            } else {
-              g.predecessors(n).forEach(pre => g.successors(n).forEach(suc => clone.setEdge(pre,suc,{})))
-            }
+      function createGroup(children,name){
+        g.setNode(name,{type:'group',width:g.graph().nwidth,height:children.length*g.graph().nheight+(children.length-1)*g.graph().nodesep})
+        children.forEach(child => g.setParent(child,name))
+      }
+      createGroup(['B302','B322','B342'],'IBC')
+      g.removeNode('[B322 B342]*')
+      g.removeNode('[B302 B342]*')
+      g.removeNode('[B302 B322]*')
+
+
+      function positionLogics(){
+        var slots = []
+
+        function ranker(n){
+          if(g.node(n).type == 'logic' && g.node(n).x == undefined){
+            var farthest = g.predecessors(n).reduce((max,n) => Math.max(max,g.node(n).x != undefined ? g.node(n).x : ranker(n)),0)
+            g.node(n).x = farthest+1
+            var li = farthest%g.graph().ranksep, sx = farthest-li
+            slots[sx] = slots[sx] || []
+            slots[sx][li] = slots[sx][li] || []
+            slots[sx][li].push(n)
+          }
+          return g.node(n).x || 0
+        }
+        function y(n){
+          return g.node(n).y!=undefined?g.node(n).y:y(g.parent(n))
+        }
+        g.nodes().forEach(ranker)
+        slots.forEach((levels,sx) => {
+          let slotsep = g.graph().ranksep/(levels.length+1)
+          levels.forEach((level,li) => {
+            level.forEach(n => {
+              g.node(n).x = sx+slotsep*(li+1)
+              var pres = g.predecessors(n)
+              g.node(n).y = pres.map(y).reduce((a,b) => a+b,0)/pres.length
+            })
           })
-        dagre.layout(clone)
+        })
       }
 
+      function positionGroups(){
+        g.nodes().filter(n => g.node(n).type == 'group').forEach(n => {
+          var children = g.children(n).map(n => ({n}))
+          children.forEach(p => {
+            var neighbors = g.neighbors(p.n)
+            p.i = neighbors.reduce((sum,n) => sum+g.node(n).y,0)/neighbors.length
+          })
+          children.sort((a,b) => a.i-b.i)
+          children.forEach((p,i) => {
+            g.node(p.n).x = g.node(n).x
+            g.node(p.n).y = g.node(n).y-g.node(n).height/2+g.node(p.n).height/2+i*(g.graph().nheight+g.graph().nodesep)
+          })
+        })
+      }
+
+      function adjustLogics(){
+        g.nodes().filter(n => g.node(n).type == 'logic').forEach(n => {
+          var neighbors = g.neighbors(n)
+          g.node(n).y = neighbors.reduce((sum,n) => sum+g.node(n).y,0)/neighbors.length
+        })
+      }
+
+      function layout(){
+        function addEdge(v,w){
+          if(clone.edge(v,w)==undefined){
+            clone.setEdge(v,w,{weight:1})
+          } else {
+            clone.edge(v,w).weight++
+          }
+        }
+        var clone = new dagre.graphlib.Graph()
+        // Copy Graph
+        clone.setGraph(g.graph())
+        g.nodes().forEach(n => clone.setNode(n,g.node(n)))
+        g.edges().forEach(({v,w}) => clone.setEdge(v,w,g.edge(v,w)))
+        // Make changes
+        g.nodes().filter(n => g.node(n).type=='logic').forEach(n => {
+          clone.predecessors(n).forEach(pre => clone.successors(n).forEach(suc => addEdge(pre,suc)))
+          clone.removeNode(n)
+        })
+        g.nodes().filter(n => g.node(n).type=='group').forEach(n => {
+          g.children(n).forEach(child => {
+            clone.inEdges(child).forEach(({v,w}) => addEdge(v,n))
+            clone.outEdges(child).forEach(({v,w}) => addEdge(n,w))
+            clone.removeNode(child)
+          })
+        })
+        // layout the clone
+        dagre.layout(clone)
+        // adding the removed components back in
+        positionLogics()
+        positionGroups()
+        adjustLogics()
+      }
+      
       function render(){
         // Create Joined Data selections
         var _nodes = $nodes.selectAll('g')
@@ -73,6 +176,7 @@
         // Update elements with the new calculations
         var enteringNodes = _nodes.enter().append('g')
           .attr('data-id',d => d)
+          .attr('data-type',d => g.node(d).type)
         enteringNodes.append('rect')
           .attr('width',d => g.node(d).width)
           .attr('height',d => g.node(d).height)
@@ -88,6 +192,7 @@
         _edges.enter().append('path')
           .attr('data-source',d => d.v)
           .attr('data-target',d => d.w)
+          .attr('data-type',d => g.edge(d.v,d.w).type)
         .merge(_edges)
           .attr('d',d => {
             var s = g.node(d.v)
