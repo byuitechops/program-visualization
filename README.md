@@ -48,5 +48,5 @@ An attempt to visualize an entire program (degree logic, requisite logic, catalo
 - 120 credit limit
 - Equivalent Courses?
 
-# Questions
+## Questions
 Do concurrent requisites ever have Or's?
