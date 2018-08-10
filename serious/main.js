@@ -109,51 +109,49 @@ async function main(){
   // E -> J
   // E -> F
   // `)
-  // var levels = ranking(Graph)
-  // console.log(levels)
-  // setNodes(levels)
+  var levels = ranking(Graph)
+  console.log(levels)
+  setNodes(levels)
   Graph.nodes().forEach(n => {
     var node = Graph.node(n)
     node.id = n
     node.width = 100*(node.type=='course')
     node.height = 20*(node.type=='course')
-    node.x = 0
-    node.y = 0
   })
   update()
   // for(let levels of ){
   //   await new Promise(res => window.onclick = res)
   // }
-  const simulation = d3.forceSimulation()
-    .force('link',d3.forceLink().id(d => d.id))
-    .force('collide',d3.forceCollide().radius(d => d.type=='course'?40:10))
-    .force('center',d3.forceCenter(width/2,height/2))
-    .nodes(Graph.nodes().map(n => Graph.node(n)))
+  // const simulation = d3.forceSimulation()
+  //   .force('link',d3.forceLink().id(d => d.id))
+  //   .force('collide',d3.forceCollide().radius(d => d.type=='course'?40:10))
+  //   .force('center',d3.forceCenter(width/2,height/2))
+  //   .nodes(Graph.nodes().map(n => Graph.node(n)))
 
-  simulation.force('link')
-    .links(Graph.edges().map(({v,w}) => ({source:v,target:w})))
+  // simulation.force('link')
+  //   .links(Graph.edges().map(({v,w}) => ({source:v,target:w})))
   
-  var nodes = $nodes.selectAll('g')
-    .data(Graph.nodes(),function(d){ return d ? d : this.getAttribute('data-id') })
-  var edges = $edges.selectAll('path')
-    .data(Graph.edges(),function(d){ return d ? d.v+'-'+d.w : this.getAttribute('data-source')+'-'+this.getAttribute('data-target') })
+  // var nodes = $nodes.selectAll('g')
+  //   .data(Graph.nodes(),function(d){ return d ? d : this.getAttribute('data-id') })
+  // var edges = $edges.selectAll('path')
+  //   .data(Graph.edges(),function(d){ return d ? d.v+'-'+d.w : this.getAttribute('data-source')+'-'+this.getAttribute('data-target') })
     
-  simulation.on('tick',() => {
-    nodes.attr('transform',d => {
-      var node = Graph.node(d)
-      return `translate(${[Graph.node(d).x-Graph.node(d).width/2,Graph.node(d).y-Graph.node(d).height/2]})`
-    })
-    edges.attr('d',d => {
-      var s = Graph.node(d.v)
-      var t = Graph.node(d.w)
-      return [
-        'M',s.x,s.y,
-        'L',t.x,t.y,
-      ].join(' ')
-    })
-  })
+  // simulation.on('tick',() => {
+  //   nodes.attr('transform',d => {
+  //     var node = Graph.node(d)
+  //     return `translate(${[Graph.node(d).x-Graph.node(d).width/2,Graph.node(d).y-Graph.node(d).height/2]})`
+  //   })
+  //   edges.attr('d',d => {
+  //     var s = Graph.node(d.v)
+  //     var t = Graph.node(d.w)
+  //     return [
+  //       'M',s.x,s.y,
+  //       'L',t.x,t.y,
+  //     ].join(' ')
+  //   })
+  // })
   window.Graph = Graph
-  window.simulation = simulation
+  // window.simulation = simulation
 }
 
 main()

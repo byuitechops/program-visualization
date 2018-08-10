@@ -4,7 +4,7 @@
       text {
         font-weight: 300;
         font-family: "Helvetica Neue", Helvetica, Arial, sans-serf;
-        font-size: 14px;
+        font-size: 10px;
         text-anchor: middle;
         dominant-baseline:middle;
       }
@@ -38,8 +38,8 @@
       }
     </style>
     <script src="req-tree.js"></script>
-    <script src="d3.min.js" charset="utf-8"></script>
-    <script src="dagre.min.js"></script>
+    <script src="https://d3js.org/d3.v4.min.js" charset="utf-8"></script>
+    <script src="https://dagrejs.github.io/project/dagre/latest/dagre.min.js"></script>
   </head>
   <body>
     <script>
@@ -51,11 +51,11 @@
       const g = dagre.graphlib.json.read(reqTree)
         .setGraph({
           rankdir:'LR',
-          nodesep:5,
+          nodesep:0,
           edgesep:0,
-          ranksep:50,
-          marginx:50,
-          nwidth:100,
+          ranksep:200,
+          marginx:0,
+          nwidth:0,
           nheight:20,
         })
 
@@ -71,7 +71,6 @@
       g.removeNode('[]*')
 
       function createGroups(){
-        // TODO: Look into using tarjan instead of findCycles
         dagre.graphlib.alg.findCycles(g).forEach(cycle => {
           var isgroup = cycle.every(n => g.nodeEdges(n)
                                 .filter(e => cycle.includes(e.v) && cycle.includes(e.w))
@@ -95,35 +94,6 @@
           }
         })
       }
-      
-      function positionLogics(){
-        var slots = []
-
-        function ranker(n){
-          if(g.node(n).type == 'logic' && g.node(n).x == undefined){
-            var farthest = g.predecessors(n).reduce((max,n) => Math.max(max,g.node(n).x != undefined ? g.node(n).x : ranker(n)),0)
-            g.node(n).x = farthest+1
-            var li = farthest%g.graph().ranksep, sx = farthest-li
-            slots[sx] = slots[sx] || []
-            slots[sx][li] = slots[sx][li] || []
-            slots[sx][li].push(n)
-          }
-          return g.node(n).x || 0
-        }
-        function y(n){
-          return g.node(n).y!=undefined?g.node(n).y:y(g.parent(n))
-        }
-        g.nodes().forEach(ranker)
-        slots.forEach((levels,sx) => {
-          levels.forEach((level,li) => {
-            level.forEach(n => {
-              g.node(n).x = sx+10*(li+1)
-              var pres = g.predecessors(n)
-              g.node(n).y = pres.map(y).reduce((a,b) => a+b,0)/pres.length
-            })
-          })
-        })
-      }
 
       function positionGroups(){
         g.nodes().filter(n => g.node(n).type == 'group').forEach(parent => {
@@ -137,13 +107,6 @@
             g.node(p.n).x = g.node(parent).x
             g.node(p.n).y = g.node(parent).y-g.node(parent).height/2+g.node(p.n).height/2+i*(g.graph().nheight+g.graph().nodesep)
           })
-        })
-      }
-
-      function adjustLogics(){
-        g.nodes().filter(n => g.node(n).type == 'logic').forEach(n => {
-          var neighbors = g.neighbors(n)
-          g.node(n).y = neighbors.reduce((sum,n) => sum+g.node(n).y,0)/neighbors.length
         })
       }
 
@@ -161,14 +124,6 @@
         g.nodes().forEach(n => clone.setNode(n,g.node(n)))
         g.edges().forEach(({v,w}) => clone.setEdge(v,w,g.edge(v,w)))
         // Make changes
-        g.nodes().filter(n => g.node(n).type=='logic').forEach(n => {
-          var edges = clone.nodeEdges(n)
-          // console.log(edges)
-          // var weight = edges.reduce((sum,{v,w}) => sum+(clone.edge(v,w).weight||1),0)/(edges.length-1)
-          // console.log(weight,n)
-          clone.predecessors(n).forEach(pre => clone.successors(n).forEach(suc => clone.setEdge(pre,suc,{})))
-          clone.removeNode(n)
-        })
         g.nodes().filter(n => g.node(n).type=='group').forEach(n => {
           g.children(n).forEach(child => {
             clone.inEdges(child).forEach(({v,w}) => addEdge(v,n))
@@ -179,82 +134,32 @@
         // layout the clone
         dagre.layout(clone)
         // adding the removed components back in
-        positionLogics()
         positionGroups()
-        adjustLogics()
-        routing()
-        // render(clone)
+        
+        g.nodes().map(n => ({id:n,data:g.node(n)})).sort((a,b) => a.data.x-b.data.x).forEach(n => {
+          var farthest = g.predecessors(n.id).reduce((max,p) => Math.max(max,g.node(p).x),0)
+          if(n.data.type == 'logic'){
+            n.data.x = farthest+50
+          } else {
+            n.data.x = (farthest-farthest%g.graph().ranksep)+g.graph().ranksep
+          }
+        })
+        // var grid = g.nodes().reduce((grid,n) => {
+        //   var r = g.node(n).x/g.graph().ranksep
+        //   grid[r] = grid[r] || []
+        //   grid[r].push(g.node(n))
+        //   return grid
+        // },[])
+        
       }
       
       function routing(){
-        var routes = new dagre.graphlib.Graph({multigraph:true,directed:false})
+        var routes = new dagre.graphlib.Graph()
         // Copy Graph
         routes.setGraph(g.graph())
         g.nodes().filter(n => g.node(n).type != 'group').forEach(n => routes.setNode(n,g.node(n)))
+        g.edges().forEach(({v,w}) => routes.setEdge(v,w,g.edge(v,w)))
         
-        var grid = Object.values(g.nodes().map(n => ({n,...g.node(n)})).reduce((grid,n) => {
-          if(grid[n.x] == undefined){
-            grid[n.x] = []
-            grid[n.x].x = n.x
-            grid[n.x].type = n.type
-          }
-          grid[n.x].push(n)
-          return grid
-        },{})).sort((a,b) => a.x-b.x)
-        window.grid = grid
-        function addNode(x,y,p1,p2){
-          var n = x+','+y
-          routes.setNode(n,{type:'route',x:x,y:y})
-          return n
-        }
-        var memory = []
-        grid.slice(0,9).forEach((col,ci) => {
-          console.log(ci,col.type)
-          if(col.type=='course' && memory.length){
-            col.sort((a,b) => a.y-b.y).concat({y:g.graph().height}).reduce((last,n,ni) => {
-              console.log(memory)
-              memory.forEach((mem,mi) => {
-                var i = ci-memory.length+mi
-                var node = addNode(grid[i].x,n.y)
-                routes.setEdge(mem,node)
-                if(mi && n.n){
-                  routes.setEdge(memory[mi-1],node)
-                }
-                memory[mi] = node
-              })
-              if(n.n){
-                routes.setEdge(memory[memory.length-1],n.n,{},n.n)
-              }
-              // if(n.y-last > g.graph().nheight){
-              // }
-              return n.y
-            },0)
-            memory = []
-            return ci
-          } else if(col.type=='logic'){
-            memory.push(addNode(col.x,0))
-          }
-        })
-        window.routes = routes
-        const $routes = svg.append('g')
-        let edges = $routes.append('g').selectAll('line')
-          .data(routes.edges())
-          .enter().append('line')
-            .attr('stroke','red')
-            .attr('stroke-width',1)
-            .attr('stroke-opacity',1)
-            .attr('x1',e => routes.node(e.v).x)
-            .attr('y1',e => routes.node(e.v).y)
-            .attr('x2',e => routes.node(e.w).x)
-            .attr('y2',e => routes.node(e.w).y)
-        let nodes = $routes.append('g').selectAll('circle')
-          .data(routes.nodes())
-          .enter().append('circle')
-            .attr('fill',n => routes.node(n).type=='route' ? 'red' : 'blue')
-            .attr('fill-opacity',n => routes.node(n).type=='route' ? 1 : 0.5)
-            .attr('r',n => routes.node(n).type=='route' ? 2 : 3)
-            .attr('cx',n => routes.node(n).x)
-            .attr('cy',n => routes.node(n).y)
       }
 
       function render(g){
@@ -264,23 +169,23 @@
         var _edges = $edges.selectAll('path')
           .data(g.edges(),function(d){ return d ? d.v+'-'+d.w : this.getAttribute('data-source')+'-'+this.getAttribute('data-target') })
         
-        // _edges.enter().append('path')
-        //   .attr('data-source',d => d.v)
-        //   .attr('data-target',d => d.w)
-        //   .attr('data-type',d => g.edge(d.v,d.w).type)
-        // .merge(_edges)
-        //   .attr('d',d => {
-        //     var s = g.node(d.v)
-        //     var t = g.node(d.w)
-        //     // return describeLine(s.x,s.y,t.x,t.y)
-        //     return [
-        //       'M',s.x,s.y,
-        //       'L',t.x-t.width,t.y,
-        //     ].join(' ')
-        //   })
-        // _edges.exit().remove()
-
         // Update elements with the new calculations
+        _edges.enter().append('path')
+          .attr('data-source',d => d.v)
+          .attr('data-target',d => d.w)
+          .attr('data-type',d => g.edge(d.v,d.w).type)
+        .merge(_edges)
+          .attr('d',d => {
+            var s = g.node(d.v)
+            var t = g.node(d.w)
+            // return describeLine(s.x,s.y,t.x,t.y)
+            return [
+              'M',s.x,s.y,
+              'L',t.x-t.width,t.y,
+            ].join(' ')
+          })
+        _edges.exit().remove()
+
         var enteringNodes = _nodes.enter().append('g')
           .attr('data-id',d => d)
           .attr('data-type',d => g.node(d).type)
@@ -307,3 +212,6 @@
     </script>
   </body>
 </html>
+
+
+<script src="https://d3js.org/d3.v4.min.js" charset="utf-8"></script>
