@@ -10,6 +10,8 @@ An attempt to visualize an entire program (degree logic, requisite logic, catalo
 
 [Prideful Failure](/experiments/failure.2.html)
 
+[Actual Progress](/backtothestart/index.html)
+
 ## Use Cases
 
 ### All
