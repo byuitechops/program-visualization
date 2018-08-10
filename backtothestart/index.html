@@ -187,12 +187,13 @@
       }
       
       function routing(){
-        var routes = new dagre.graphlib.Graph({multigraph:true,directed:false})
+        var r = new dagre.graphlib.Graph({multigraph:true,directed:false})
+        window.r = r
         // Copy Graph
-        routes.setGraph(g.graph())
-        g.nodes().filter(n => g.node(n).type != 'group').forEach(n => routes.setNode(n,g.node(n)))
+        r.setGraph(g.graph())
+        g.nodes().filter(n => g.node(n).type != 'group').forEach(n => r.setNode(n,g.node(n)))
         
-        var grid = Object.values(g.nodes().map(n => ({n,...g.node(n)})).reduce((grid,n) => {
+        var grid = Object.values(r.nodes().map(n => ({n,...g.node(n)})).reduce((grid,n) => {
           if(grid[n.x] == undefined){
             grid[n.x] = []
             grid[n.x].x = n.x
@@ -204,57 +205,77 @@
         window.grid = grid
         function addNode(x,y,p1,p2){
           var n = x+','+y
-          routes.setNode(n,{type:'route',x:x,y:y})
+          r.node(n) == undefined && r.setNode(n,{type:'route',x:x,y:y})
           return n
         }
         var memory = []
-        grid.slice(0,9).forEach((col,ci) => {
+        var nodes = r.nodes().map(n => ({n,...g.node(n)})).sort((a,b) => a.y-b.y)
+        grid.slice(0,3).forEach((col,ci) => {
           console.log(ci,col.type)
           if(col.type=='course' && memory.length){
-            col.sort((a,b) => a.y-b.y).concat({y:g.graph().height}).reduce((last,n,ni) => {
-              console.log(memory)
-              memory.forEach((mem,mi) => {
-                var i = ci-memory.length+mi
-                var node = addNode(grid[i].x,n.y)
-                routes.setEdge(mem,node)
-                if(mi && n.n){
-                  routes.setEdge(memory[mi-1],node)
-                }
-                memory[mi] = node
-              })
-              if(n.n){
-                routes.setEdge(memory[memory.length-1],n.n,{},n.n)
+            nodes.filter(node => node.x >= grid[ci-memory.length-1].x && node.x <= col.x).forEach((node,ni) => {
+              if(ni == 0){
+                memory = memory.map(x => addNode(x,node.y))
               }
-              // if(n.y-last > g.graph().nheight){
-              // }
-              return n.y
-            },0)
+              var padded = memory.slice()
+              if(node.type == 'course'){
+                if(node.x != col.x){
+                  padded.unshift(node.n)
+                } else {
+                  padded.push(node.n)
+                }
+              }
+              console.log(padded)
+              for(var mi = -1,created,i; mi <= memory.length; mi++){
+                i = ci-memory.length+mi
+                var mem = memory[mi], 
+                console.log(mem)
+                if(mi == -1 || mi == memory.length){
+                  if(/* needs padding */){
+                    created = mode.n
+                  } else {
+                    continue;
+                  }
+                } else {
+                  mem = memory[mi]
+                  created = addNode(grid[i].x,node.y)
+                }
+                r.setEdge(mem,created)
+                if(mi){
+                  r.setEdge(memory[mi-1],created)
+                }
+                memory[mi] = created
+              }
+              memory.forEach((mem,mi) => {
+              })
+            })
             memory = []
             return ci
           } else if(col.type=='logic'){
-            memory.push(addNode(col.x,0))
+            memory.push(col.x)
           }
         })
-        window.routes = routes
+        r.nodes().filter(n => r.node(n) == undefined).forEach(n => console.error(n,'is undefined'))
+        
         const $routes = svg.append('g')
-        let edges = $routes.append('g').selectAll('line')
-          .data(routes.edges())
+        $routes.append('g').selectAll('line')
+          .data(r.edges())
           .enter().append('line')
             .attr('stroke','red')
             .attr('stroke-width',1)
             .attr('stroke-opacity',1)
-            .attr('x1',e => routes.node(e.v).x)
-            .attr('y1',e => routes.node(e.v).y)
-            .attr('x2',e => routes.node(e.w).x)
-            .attr('y2',e => routes.node(e.w).y)
-        let nodes = $routes.append('g').selectAll('circle')
-          .data(routes.nodes())
+            .attr('x1',e => r.node(e.v).x)
+            .attr('y1',e => r.node(e.v).y)
+            .attr('x2',e => r.node(e.w).x)
+            .attr('y2',e => r.node(e.w).y)
+        $routes.append('g').selectAll('circle')
+          .data(r.nodes())
           .enter().append('circle')
-            .attr('fill',n => routes.node(n).type=='route' ? 'red' : 'blue')
-            .attr('fill-opacity',n => routes.node(n).type=='route' ? 1 : 0.5)
-            .attr('r',n => routes.node(n).type=='route' ? 2 : 3)
-            .attr('cx',n => routes.node(n).x)
-            .attr('cy',n => routes.node(n).y)
+            .attr('fill',n => r.node(n).type=='route' ? 'red' : 'blue')
+            .attr('fill-opacity',n => r.node(n).type=='route' ? 1 : 0.5)
+            .attr('r',n => r.node(n).type=='route' ? 2 : 3)
+            .attr('cx',n => r.node(n).x)
+            .attr('cy',n => r.node(n).y)
       }
 
       function render(g){
