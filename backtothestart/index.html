@@ -40,6 +40,7 @@
     <script src="req-tree.js"></script>
     <script src="d3.min.js" charset="utf-8"></script>
     <script src="dagre.min.js"></script>
+    <script src="ngraph.min.js"></script>
   </head>
   <body>
     <script>
@@ -185,100 +186,137 @@
         routing()
         // render(clone)
       }
-      
-      function routing(){
-        var r = new dagre.graphlib.Graph({multigraph:true,directed:false})
-        window.r = r
-        // Copy Graph
-        r.setGraph(g.graph())
-        g.nodes().filter(n => g.node(n).type != 'group').forEach(n => r.setNode(n,g.node(n)))
-        
-        var grid = Object.values(r.nodes().map(n => ({n,...g.node(n)})).reduce((grid,n) => {
-          if(grid[n.x] == undefined){
-            grid[n.x] = []
-            grid[n.x].x = n.x
-            grid[n.x].type = n.type
-          }
-          grid[n.x].push(n)
-          return grid
-        },{})).sort((a,b) => a.x-b.x)
-        window.grid = grid
-        function addNode(x,y,p1,p2){
-          var n = x+','+y
-          r.node(n) == undefined && r.setNode(n,{type:'route',x:x,y:y})
-          return n
-        }
-        var memory = []
-        var nodes = r.nodes().map(n => ({n,...g.node(n)})).sort((a,b) => a.y-b.y)
-        grid.slice(0,3).forEach((col,ci) => {
-          console.log(ci,col.type)
-          if(col.type=='course' && memory.length){
-            nodes.filter(node => node.x >= grid[ci-memory.length-1].x && node.x <= col.x).forEach((node,ni) => {
-              if(ni == 0){
-                memory = memory.map(x => addNode(x,node.y))
-              }
-              var padded = memory.slice()
-              if(node.type == 'course'){
-                if(node.x != col.x){
-                  padded.unshift(node.n)
-                } else {
-                  padded.push(node.n)
-                }
-              }
-              console.log(padded)
-              for(var mi = -1,created,i; mi <= memory.length; mi++){
-                i = ci-memory.length+mi
-                var mem = memory[mi], 
-                console.log(mem)
-                if(mi == -1 || mi == memory.length){
-                  if(/* needs padding */){
-                    created = mode.n
-                  } else {
-                    continue;
-                  }
-                } else {
-                  mem = memory[mi]
-                  created = addNode(grid[i].x,node.y)
-                }
-                r.setEdge(mem,created)
-                if(mi){
-                  r.setEdge(memory[mi-1],created)
-                }
-                memory[mi] = created
-              }
-              memory.forEach((mem,mi) => {
-              })
-            })
-            memory = []
-            return ci
-          } else if(col.type=='logic'){
-            memory.push(col.x)
+
+      function pather(r){
+        // copy this graph
+        var rgraph = ngraph.graph()
+        r.nodes().forEach(n => rgraph.addNode(n))
+        r.edges().forEach(e => rgraph.addLink(e.v,e.w,r.edge(e)))
+        var current
+        var none = {weight:Number.POSITIVE_INFINITY}
+        var PathFinder = ngraph.path.nba(rgraph,{
+          distance(v,w,l){
+            return (r.edge(v.id,w.id) || r.edge(v.id,w.id,current) || none).weight
           }
         })
-        r.nodes().filter(n => r.node(n) == undefined).forEach(n => console.error(n,'is undefined'))
-        
+        g.edges().forEach(e => {
+          current = e.v
+          g.edge(e).path = PathFinder.find(e.w,e.v).map(n => n.id)
+          g.edge(e).path.reduce((v,w) => {
+            if(!r.edge(v,w,current)){
+              r.setEdge(v,w,r.edge(v,w),current)
+            }
+            return w
+          })
+        })
+      }
+
+      function routesrender(r){
         const $routes = svg.append('g')
         $routes.append('g').selectAll('line')
           .data(r.edges())
           .enter().append('line')
-            .attr('stroke','red')
-            .attr('stroke-width',1)
-            .attr('stroke-opacity',1)
+            // .attr('stroke-width',e => r.nodeEdges(e.v,e.w).length)
+            .attr('stroke-opacity',e => e.name && r.edge(e.v,e.w,e.name) ? 0.5 : 0)
+            .attr('stroke',e => e.name && r.edge(e.v,e.w,e.name) ? 'black' : 'red')
             .attr('x1',e => r.node(e.v).x)
             .attr('y1',e => r.node(e.v).y)
             .attr('x2',e => r.node(e.w).x)
             .attr('y2',e => r.node(e.w).y)
-        $routes.append('g').selectAll('circle')
-          .data(r.nodes())
-          .enter().append('circle')
-            .attr('fill',n => r.node(n).type=='route' ? 'red' : 'blue')
-            .attr('fill-opacity',n => r.node(n).type=='route' ? 1 : 0.5)
-            .attr('r',n => r.node(n).type=='route' ? 2 : 3)
-            .attr('cx',n => r.node(n).x)
-            .attr('cy',n => r.node(n).y)
+        // $routes.append('g').selectAll('circle')
+        //   .data(r.nodes())
+        //   .enter().append('circle')
+        //     .attr('data-id',n => n)
+        //     .attr('fill',n => ({route:'black',course:'red',logic:'red',mid:'purple'})[r.node(n).type])
+        //     .attr('fill-opacity',n => r.node(n).type=='route' ? 1 : 1)
+        //     .attr('r',n => r.node(n).type=='route' ? 2 : 2)
+        //     .attr('cx',n => r.node(n).x)
+        //     .attr('cy',n => r.node(n).y)
+      }
+      
+      function routing(){
+        var r = new dagre.graphlib.Graph({multigraph:true,directed:false})
+        window.r = r
+        
+        function addNode(x,y){
+          var n = x+','+y
+          r.setNode(n,{type:'route',x:x,y:y})
+          return n
+        }
+        function addEdge(p1,p2,name){
+          r.setEdge(p1,p2,{weight:Math.abs(r.node(p1).x-r.node(p2).x)+Math.abs(r.node(p1).y-r.node(p2).y)},name)
+        }
+
+        // Copy Graph
+        g.nodes().filter(n => g.node(n).type != 'group').forEach(n => r.setNode(n,g.node(n)))
+        
+        var nodes = r.nodes().map(n => ({n,...g.node(n)})).sort((a,b) => a.y-b.y)
+        nodes.reduce((lasts,node) => {
+          lasts[node.x] = lasts[node.x] || node
+          if(node.y-lasts[node.x].y>g.graph().nheight*2 && node.type=='course'){
+            var mid = {
+              y:(node.y+lasts[node.x].y)/2,
+              x:node.x,
+              n:node.n+'~'+lasts[node.x].n,
+              type:'mid',
+            }
+            nodes.push(mid)
+            r.setNode(mid.n,mid)
+          }
+          lasts[node.x] = node
+          return lasts
+        },{})
+        nodes.sort((a,b) => a.y-b.y)
+        var grid = Object.values(nodes.reduce((grid,n) => {
+          if(grid[n.x] == undefined){
+            grid[n.x] = {
+              x:n.x,
+              type:n.type,
+            }
+          }
+          return grid
+        },{})).sort((a,b) => a.x-b.x)
+        window.grid = grid
+
+        var memory = []
+        grid.forEach((col,ci) => {
+          if(col.type=='course' && memory.length){
+            /* Node connections */
+            nodes.filter(node => node.x >= grid[ci-memory.length-1].x && node.x <= col.x).forEach((node,ni) => {
+              if(ni == 0){
+                memory = memory.map(x => addNode(x,node.y))
+              }
+              for(var mi = 0,created,i; mi < memory.length; ++mi){
+                i = ci-memory.length+mi
+                created = grid[i].x == node.x ? node.n : addNode(grid[i].x,node.y)
+                addEdge(memory[mi],created)
+                mi && addEdge(memory[mi-1],created,memory[mi-1]==node.n?node.n:undefined)
+                memory[mi] = created
+              }
+              // Front node connections
+              if(grid[ci-memory.length-1].x == node.x){
+                addEdge(node.n,memory[0],node.type=="mid"?undefined:node.n)
+              }
+              // Back node connections
+              if(grid[ci].x == node.x){
+                addEdge(memory[memory.length-1],node.n)
+              }
+            })
+            memory = []
+            last = 0
+          } else if(col.type=='logic'){
+            memory.push(col.x)
+          }
+        })
+
+        pather(r)
+        routesrender(r)
+        render(g)
       }
 
       function render(g){
+        const $nodes = svg.append('g').classed('nodes',true)
+        const $edges = svg.append('g').classed('edges',true)
         // Create Joined Data selections
         var _nodes = $nodes.selectAll('g')
           .data(g.nodes(),function(d){ return d ? d : this.getAttribute('data-id') })
@@ -324,7 +362,7 @@
       
       createGroups()
       layout()
-      render(g)
+      // render(g)
     </script>
   </body>
 </html>
