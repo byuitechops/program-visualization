@@ -27,3 +27,36 @@ col.sort((a,b) => a.y-b.y).concat({y:g.graph().height}).reduce((last,n,ni) => {
   // }
   return n.y
 },0)
+
+.attr('d',d => {
+  var s = g.node(d.v)
+  var t = g.node(d.w)
+  // return describeLine(s.x,s.y,t.x,t.y)
+  return [
+    'M',s.x,s.y,
+    'L',t.x-t.width,t.y,
+  ].join(' ')
+})
+
+function routesrender(r){
+  const $routes = svg.append('g')
+  $routes.append('g').selectAll('line')
+    .data(r.edges())
+    .enter().append('line')
+      // .attr('stroke-width',e => r.nodeEdges(e.v,e.w).length)
+      .attr('stroke-opacity',e => e.name && r.edge(e.v,e.w,e.name) ? 0.5 : 0)
+      .attr('stroke',e => e.name && r.edge(e.v,e.w,e.name) ? 'black' : 'red')
+      .attr('x1',e => r.node(e.v).x)
+      .attr('y1',e => r.node(e.v).y)
+      .attr('x2',e => r.node(e.w).x)
+      .attr('y2',e => r.node(e.w).y)
+  // $routes.append('g').selectAll('circle')
+  //   .data(r.nodes())
+  //   .enter().append('circle')
+  //     .attr('data-id',n => n)
+  //     .attr('fill',n => ({route:'black',course:'red',logic:'red',mid:'purple'})[r.node(n).type])
+  //     .attr('fill-opacity',n => r.node(n).type=='route' ? 1 : 1)
+  //     .attr('r',n => r.node(n).type=='route' ? 2 : 2)
+  //     .attr('cx',n => r.node(n).x)
+  //     .attr('cy',n => r.node(n).y)
+}
