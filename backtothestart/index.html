@@ -14,8 +14,8 @@
       }
 
       .nodes g[data-type="group"] rect {
-        stroke:#e9aaff;
-        stroke-width:3px;
+        /* stroke:#e9aaff; */
+        /* stroke-width:3px; */
         fill:none;
       }
       
@@ -35,33 +35,34 @@
       .nodes g.highlight circle{
         stroke:red;
       }
+      .edges line, 
       .edges path {
         stroke:none; /* Color for Error */
         stroke-width: 1.5px;
         fill:none;
       }
-      .edges path[data-type="pre"]{
+      .edges [data-type="pre"]{
         stroke: #AAA;
       }
-      .edges path[data-type="pre"].highlight{
+      .edges [data-type="pre"].highlight{
         stroke: black;
       }
-      .edges path[data-type="co"]{
+      .edges [data-type="co"]{
         stroke: #ffd8a0;
       }
-      .edges path[data-type="co"].highlight{
+      .edges [data-type="co"].highlight{
         stroke: #ff3f00;
       }
-      .edges path[data-type="concur"]{
+      .edges [data-type="concur"]{
         stroke: purple;
       }
-      .edges path[data-type="path"]{
+      .edges [data-type="path"]{
         stroke: lightcoral;
       }
-      .edges path[data-type="route"]{
+      .edges [data-type="route"]{
         stroke: #CCC;
       }
-      .edges path.highlight {
+      .edges .highlight {
         stroke-opacity:1;
       }
       .routes line{
