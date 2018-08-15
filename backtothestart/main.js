@@ -85,7 +85,7 @@ function render(g){
     .attr('data-target',e => g.edge(e).w || e.w)
     .attr('data-type',e => g.edge(e).type)
   .merge(_edges)
-    .attr('d',e => 
+    .attr('d',e =>
       'M'+g.node(e.v).x+','+g.node(e.v).y+' '+
       g.edge(e).path.map(n => r.node(n).paths[g.edge(e).name]).map(({x,y}) => 'L'+x+','+y).join(' ')+
       'L'+g.node(e.w).x+','+g.node(e.w).y+' '

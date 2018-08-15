@@ -1,4 +1,14 @@
 function createGroups(g){
+  function group(name,children){
+    name = '{'+name+'}'
+    g.setNode(name,{
+      type:'group',
+      width:g.graph().nwidth,
+      height:children.length*g.graph().nheight+(children.length-1)*g.graph().nodesep
+    })
+    children.forEach(child => g.setParent(child,name))
+  }
+
   // TODO: Look into using tarjan instead of findCycles
   dagre.graphlib.alg.findCycles(g).forEach(cycle => {
     var isgroup = cycle.every(n => g.nodeEdges(n)
@@ -13,13 +23,20 @@ function createGroups(g){
         }
         return true
       })
-      var name = '{'+children.join(' ')+'}'
-      g.setNode(name,{
-        type:'group',
-        width:g.graph().nwidth,
-        height:children.length*g.graph().nheight+(children.length-1)*g.graph().nodesep
-      })
-      children.forEach(child => g.setParent(child,name))
+      // group(children.join(' '),children)
+    }
+  })
+
+  Object.entries(g.nodes().filter(n => g.node(n).type == 'course').reduce((parents,n) => {
+    var parent = g.predecessors(n)
+    if(parent.length==1){
+      parents[parent[0]] = parents[parent[0]] || []
+      parents[parent[0]].push(n)
+    }
+    return parents
+  },{})).forEach(([n,children]) => {
+    if(children.length > 1){
+      group(n,children)
     }
   })
 }
@@ -41,27 +58,30 @@ function rundagre(g){
   // Make changes
   g.nodes().filter(n => g.node(n).type=='logic').forEach(n => {
     var edges = clone.nodeEdges(n)
-    // Left commented, cause I will probably want to play with the weights more, with different graphs
-      // console.log(edges)
-      var weight = edges.reduce((sum,{v,w}) => sum+(clone.edge(v,w).weight||1),0)/(edges.length-1)
-      // console.log(weight,n)
-    clone.predecessors(n).forEach(pre => clone.successors(n).forEach(suc => clone.setEdge(pre,suc,{weight})))
+    clone.predecessors(n).forEach(pre => clone.successors(n).forEach(suc => clone.setEdge(pre,suc,{})))
     clone.removeNode(n)
   })
-  g.nodes().filter(n => g.node(n).type=='group').forEach(n => {
+  var groups = g.nodes().filter(n => g.node(n).type=='group')
+  groups.forEach(n => {
     g.children(n).forEach(child => {
       clone.inEdges(child).forEach(({v,w}) => addEdge(v,n))
       clone.outEdges(child).forEach(({v,w}) => addEdge(n,w))
       clone.removeNode(child)
     })
   })
+  window.clone = clone
   // layout the clone
   dagre.layout(clone)
+
+  groups.forEach(n => {
+    g.children(n).forEach(child => {
+      g.node(child).x = g.node(n).x
+    })
+  })
 }
 
 function positionLogics(g){
   var slots = []
-
   function ranker(n){
     if(g.node(n).type == 'logic' && g.node(n).x == undefined){
       var farthest = g.predecessors(n).reduce((max,n) => Math.max(max,g.node(n).x != undefined ? g.node(n).x : ranker(n)),0)
@@ -110,15 +130,47 @@ function adjustLogics(g){
   })
 }
 
+function addBridges(nodes,g,r){
+  const slotsize = g.graph().nheight+g.graph().nodesep
+  const cols = r.graph().grid.filter(col => col.type=='course')
+  function createBridge(x,y,n){
+    var mid = {
+      x:x,y:y,n:n,
+      type:'bridge',
+      paths:{},
+    }
+    nodes.push(mid)
+    r.setNode(mid.n,mid)
+  }
+  // Add in the 'mid' nodes
+  nodes.filter(n => n.type == 'course')
+    .concat(cols.map(col => ({x:col.x,y:g.graph().height,n:'bottom'})))
+    .reduce((lasts,node) => {
+      var count = (node.y-lasts[node.x].y)/slotsize
+      if(count > 1){
+        createBridge(node.x,(node.y+lasts[node.x].y)/2,node.n+'~'+lasts[node.x].n)
+        if(count > 3){
+          createBridge(node.x,node.y-slotsize,node.n+'~')
+          createBridge(node.x,lasts[node.x].y+slotsize,'~'+lasts[node.x].n)
+        }
+      }
+      lasts[node.x] = node
+      return lasts
+  },cols.reduce((lasts,col) => (lasts[col.x]={x:col.x,y:0,n:'top'},lasts),{}))
+}
+
 function addRouting(g){
   const r = new dagre.graphlib.Graph({directed:false})
   r.setGraph({})
+  var cols = {}
   g.nodes().filter(n => g.node(n).type!='group').forEach(n => {
     var rnode = addNode(g.node(n).x,g.node(n).y)
     g.node(n).exit = rnode
     r.node(rnode).name = n
     r.node(rnode).type = g.node(n).type
+    cols[g.node(n).x] = cols[g.node(n).x] || {x:g.node(n).x,type:g.node(n).type}
   })
+  r.graph().grid = Object.entries(cols).sort((a,b) => a[0]-b[0]).map(a => a[1])
   window.r = r
 
   function addNode(x,y){
@@ -137,31 +189,14 @@ function addRouting(g){
     .map(n => ({n,...r.node(n)}))
     .sort((a,b) => a.y-b.y)
 
-  // Add in the 'mid' nodes
-  var lasts = {}
-  nodes.forEach(node => {
-    lasts[node.x] = lasts[node.x] || {node}
-    if(node.y-lasts[node.x].y>g.graph().nheight*2 && node.type=='course'){
-      var mid = {
-        y:(node.y+lasts[node.x].y)/2,
-        x:node.x,
-        n:node.n+'~'+lasts[node.x].n,
-        type:'bridge',
-        paths:{},
-      }
-      nodes.push(mid)
-      r.setNode(mid.n,mid)
-    }
-    lasts[node.x] = node
-  },{})
+  addBridges(nodes,g,r)
 
   // Need to sort again cause the mid nodes are all at the back
   // TODO: splice in the nodes where they fit in as it is going along
   nodes.sort((a,b) => a.y-b.y)
 
   // Used to know the x and type of each column
-  var grid = Object.values(lasts).sort((a,b) => a.x-b.x)
-
+  var grid = r.graph().grid
   // Inject the extra logic layers
   for(var i = 0; i < grid.length-1; i++){
     if(grid[i].type =='logic' && grid[i+1].type =='course'){
