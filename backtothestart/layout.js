@@ -69,6 +69,10 @@ function rundagre(g){
       clone.removeNode(child)
     })
   })
+  // One way to fix it, going to try something else tho
+  // g.sinks().filter(n => !g.parent(n) && g.node(n).type == 'course' && g.predecessors(n).length == 1).forEach(n => {
+  //   clone.inEdges(n).forEach(e => clone.edge(e).weight = 1.3)
+  // })
   window.clone = clone
   // layout the clone
   dagre.layout(clone)
@@ -76,13 +80,52 @@ function rundagre(g){
   groups.forEach(n => {
     g.children(n).forEach(child => {
       g.node(child).x = g.node(n).x
+      // temporary positions
+      g.node(child).y = g.node(n).y
     })
+  })
+}
+
+function adjustLeafs(g){
+  function parents(n,first=true){
+    if(!first && g.node(n).type == 'course'){
+      return g.node(n)
+    } else {
+      return [].concat(...g.predecessors(n).map(n => parents(n,false)))
+    }
+  }
+  var leafs = g.sinks().filter(n => !g.parent(n) && g.node(n).type == 'course' && g.predecessors(n).length == 1)
+  var cols = g.nodes().filter(n => g.node(n).type=='group' || g.node(n).type=='course' && !g.parent(n)).reduce((cols,n) => {
+    var node = g.node(n)
+    cols[node.x] = cols[node.x] || {x:node.x,type:node.type,space:[[0,g.graph().height]]}
+    if(!leafs.includes(n)){
+      var space = cols[g.node(n).x].space
+      var i = space.findIndex(([from,to]) => from < node.y && node.y < to)
+      if(i != -1){
+        space.splice(i,1,[space[i][0],node.y-(node.height/2)],[node.y+(node.height/2),space[i][1]])
+      } else {
+        console.log(n,node.y,space.slice())
+      }
+    }
+    return cols
+  },{})
+  window.cols = cols
+  console.log(cols)
+  leafs.forEach(n => {
+    var node = g.node(n)
+    var p = parents(n)
+    var [sum,totalweight] = p.reduce(([sum,totalweight],parent) => {
+      var weight = (g.graph().nwidth+g.graph().ranksep)/(node.x-parent.x)
+      return [sum+parent.y*weight,totalweight+=weight]
+    },[0,0])
+    var mean = sum/totalweight
+    // node.y = mean
   })
 }
 
 function positionLogics(g){
   var slots = []
-  function ranker(n){
+  g.nodes().forEach(function ranker(n){
     if(g.node(n).type == 'logic' && g.node(n).x == undefined){
       var farthest = g.predecessors(n).reduce((max,n) => Math.max(max,g.node(n).x != undefined ? g.node(n).x : ranker(n)),0)
       g.node(n).x = farthest+1
@@ -92,20 +135,34 @@ function positionLogics(g){
       slots[sx][li].push(n)
     }
     return g.node(n).x || 0
-  }
-  function y(n){
-    return g.node(n).y!=undefined?g.node(n).y:y(g.parent(n))
-  }
-  g.nodes().forEach(ranker)
+  })
   slots.forEach((levels,sx) => {
     levels.forEach((level,li) => {
       level.forEach(n => {
         g.node(n).x = sx+g.graph().layersep*(li+1)
         var pres = g.predecessors(n)
-        g.node(n).y = pres.map(y).reduce((a,b) => a+b,0)/pres.length
+        // temporary position y
+        g.node(n).y = pres.map(n => g.node(n).y).reduce((a,b) => a+b,0)/pres.length
       })
     })
   })
+}
+
+function createGrid(g){
+  var grid = g.nodes().reduce((cols,n) => {
+    cols[g.node(n).x] = cols[g.node(n).x] || {x:g.node(n).x,type:g.node(n).type,nodes:[]}
+    cols[g.node(n).x].nodes.push(n)
+    return cols
+  },{})
+  grid = Object.entries(grid).sort((a,b) => a[0]-b[0]).map(a => a[1])
+  // Inject the extra logic layers
+  for(var i = 0; i < grid.length-1; i++){
+    if(grid[i].type =='logic' && grid[i+1].type =='course'){
+      grid.splice(i+1,0,{x:grid[i].x+g.graph().layersep,type:'logic',nodes:[]})
+      i++
+    }
+  }
+  g.graph().grid = grid
 }
 
 function positionGroups(g){
@@ -124,14 +181,29 @@ function positionGroups(g){
 }
 
 function adjustLogics(g){
-  g.nodes().filter(n => g.node(n).type == 'logic').forEach(n => {
-    var neighbors = g.neighbors(n)
-    g.node(n).y = neighbors.reduce((sum,n) => sum+g.node(n).y,0)/neighbors.length
+  var cols = g.graph().grid.filter(col => col.type == 'course')
+  g.nodes().forEach(n => {
+    if(g.node(n).type == 'logic'){
+      var ci = cols.findIndex(col => g.node(n).x < col.x)
+      var pre = g.predecessors(n).filter(n => cols[ci-1].x <= g.node(n).x)
+      var suc = g.successors(n).filter(n => g.node(n).x <= cols[ci].x)
+      var cpre = pre.filter(n => g.node(n).type == 'course')
+      var csuc = suc.filter(n => g.node(n).type == 'course')
+      if(csuc.length && csuc.length == suc.length){
+        g.node(n).y = csuc.reduce((sum,n) => sum+g.node(n).y,0)/csuc.length
+      } else if(cpre.length && cpre.length == pre.length){
+        g.node(n).y = cpre.reduce((sum,n) => sum+g.node(n).y,0)/cpre.length
+      } else {
+        g.node(n).y = pre.concat(suc).reduce((sum,n) => sum+g.node(n).y,0)/(pre.length+suc.length)
+      }
+    } else if(g.node(n).type == 'course'){
+      lastCourseX = g.node(n).x
+    }
   })
 }
 
-function addBridges(nodes,g,r){
-  const slotsize = g.graph().nheight+g.graph().nodesep
+function addBridges(nodes,r){
+  const slotsize = r.graph().nheight+r.graph().nodesep
   const cols = r.graph().grid.filter(col => col.type=='course')
   function createBridge(x,y,n){
     var mid = {
@@ -144,7 +216,7 @@ function addBridges(nodes,g,r){
   }
   // Add in the 'mid' nodes
   nodes.filter(n => n.type == 'course')
-    .concat(cols.map(col => ({x:col.x,y:g.graph().height,n:'bottom'})))
+    .concat(cols.map(col => ({x:col.x,y:r.graph().height,n:'bottom'})))
     .reduce((lasts,node) => {
       var count = (node.y-lasts[node.x].y)/slotsize
       if(count > 1){
@@ -161,16 +233,13 @@ function addBridges(nodes,g,r){
 
 function addRouting(g){
   const r = new dagre.graphlib.Graph({directed:false})
-  r.setGraph({})
-  var cols = {}
+  r.setGraph(g.graph())
   g.nodes().filter(n => g.node(n).type!='group').forEach(n => {
     var rnode = addNode(g.node(n).x,g.node(n).y)
     g.node(n).exit = rnode
     r.node(rnode).name = n
     r.node(rnode).type = g.node(n).type
-    cols[g.node(n).x] = cols[g.node(n).x] || {x:g.node(n).x,type:g.node(n).type}
   })
-  r.graph().grid = Object.entries(cols).sort((a,b) => a[0]-b[0]).map(a => a[1])
   window.r = r
 
   function addNode(x,y){
@@ -189,7 +258,7 @@ function addRouting(g){
     .map(n => ({n,...r.node(n)}))
     .sort((a,b) => a.y-b.y)
 
-  addBridges(nodes,g,r)
+  addBridges(nodes,r)
 
   // Need to sort again cause the mid nodes are all at the back
   // TODO: splice in the nodes where they fit in as it is going along
@@ -197,13 +266,6 @@ function addRouting(g){
 
   // Used to know the x and type of each column
   var grid = r.graph().grid
-  // Inject the extra logic layers
-  for(var i = 0; i < grid.length-1; i++){
-    if(grid[i].type =='logic' && grid[i+1].type =='course'){
-      grid.splice(i+1,0,{x:grid[i].x+g.graph().layersep,type:'logic'})
-      i++
-    }
-  }
   var memory = []
   grid.forEach((col,ci) => {
     if(col.type=='course' && memory.length){
@@ -340,11 +402,13 @@ function adjustColSpacing(g,r){
 function layout(g){
   createGroups(g)
   rundagre(g)
+  adjustLeafs(g)
   positionLogics(g)
+  createGrid(g)
   positionGroups(g)
   adjustLogics(g)
-  const r = addRouting(g)
-  findPaths(g,r)
-  adjustColSpacing(g,r)
-  return r
+//   const r = addRouting(g)
+//   findPaths(g,r)
+//   adjustColSpacing(g,r)
+//   return r
 }
