@@ -9,7 +9,7 @@ const g = dagre.graphlib.json.read(reqTree)
     rankdir:'LR',
     nodesep:5,
     edgesep:0,
-    ranksep:20,
+    ranksep:50,
     marginx:50,
     nwidth:100,
     nheight:20,
@@ -90,10 +90,10 @@ function render(g){
       g.edge(e).path.map(n => r.node(n).paths[g.edge(e).name]).map(({x,y}) => 'L'+x+','+y).join(' ')+
       'L'+g.node(e.w).x+','+g.node(e.w).y+' '
     )
-    // .attr('x1',e => g.edge(e).x || g.node(e.v).x)
-    // .attr('y1',e => g.node(e.v).y)
-    // .attr('x2',e => g.edge(e).x || g.node(e.w).x-(g.node(e.w).width||0))
-    // .attr('y2',e => g.node(e.w).y)
+    .attr('x1',e => g.edge(e).x || g.node(e.v).x)
+    .attr('y1',e => g.node(e.v).y)
+    .attr('x2',e => g.edge(e).x || g.node(e.w).x-(g.node(e.w).width||0))
+    .attr('y2',e => g.node(e.w).y)
   _edges.exit().remove()
 
   svg
@@ -123,3 +123,14 @@ function routesrender(g,r){
     .attr('width',g.graph().width)
     .attr('height',g.graph().height)
 }
+
+
+// svg.append('g').selectAll('rect')
+//   .data(Object.entries(spaces).reduce((arr,[x,spaces]) => arr.concat(spaces.map(n => (n.x=x,n))),[]))
+//   .enter().append('line')
+//   .attr('x1',d => d.x)
+//   .attr('x2',d => d.x)
+//   .attr('y1',d => d[0])
+//   .attr('y2',d => d[1])
+//   .attr('stroke','maroon')
+//   .attr('stroke-width',10)
