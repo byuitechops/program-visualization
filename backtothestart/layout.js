@@ -94,23 +94,22 @@ function adjustLeafs(g){
       return [].concat(...g.predecessors(n).map(n => parents(n,false)))
     }
   }
+  const spaceheight = g.graph().nheight+g.graph().nodesep*2
+  const split = (space,i,node) => space.splice(i,1,[space[i][0],node.y-(node.height/2)],[node.y+(node.height/2),space[i][1]])
   var leafs = g.sinks().filter(n => !g.parent(n) && g.node(n).type == 'course' && g.predecessors(n).length == 1)
-  var cols = g.nodes().filter(n => g.node(n).type=='group' || g.node(n).type=='course' && !g.parent(n)).reduce((cols,n) => {
+  var spaces = g.nodes().filter(n => g.node(n).type=='group' || g.node(n).type=='course' && !g.parent(n)).reduce((cols,n) => {
     var node = g.node(n)
-    cols[node.x] = cols[node.x] || {x:node.x,type:node.type,space:[[0,g.graph().height]]}
+    cols[node.x] = cols[node.x] || [[0,g.graph().height]]
     if(!leafs.includes(n)){
-      var space = cols[g.node(n).x].space
-      var i = space.findIndex(([from,to]) => from < node.y && node.y < to)
+      var i = cols[g.node(n).x].findIndex(([from,to]) => from < node.y && node.y < to)
       if(i != -1){
-        space.splice(i,1,[space[i][0],node.y-(node.height/2)],[node.y+(node.height/2),space[i][1]])
-      } else {
-        console.log(n,node.y,space.slice())
+        split(cols[g.node(n).x],i,node)
       }
     }
     return cols
   },{})
-  window.cols = cols
-  console.log(cols)
+  window.spaces = spaces
+  console.log(spaces)
   leafs.forEach(n => {
     var node = g.node(n)
     var p = parents(n)
@@ -119,6 +118,24 @@ function adjustLeafs(g){
       return [sum+parent.y*weight,totalweight+=weight]
     },[0,0])
     var mean = sum/totalweight
+    for(var i=0,closesti,closestdist; i < spaces[node.x].length; i++){
+      var space = spaces[node.x][i]
+      if(space[1]-space[0]>spaceheight){
+        var dist = Math.min(...space.map(y => Math.abs(mean-y)))
+        if(closesti===undefined || dist < closestdist){
+          closesti = i
+          closestdist = dist
+        }
+      }
+    }
+    console.log(n,closesti,spaces[node.x][closesti])
+    var closest = spaces[node.x][closesti]
+    mean = Math.max(mean,closest[0]+spaceheight/2)
+    mean = Math.min(mean,closest[1]-spaceheight/2)
+    node.y = mean
+    split(spaces[node.x],closesti,node)
+    // space.splice(i,1,[space[i][0],node.y-(node.height/2)],[node.y+(node.height/2),space[i][1]])
+    // closest[0]
     // node.y = mean
   })
 }
@@ -407,8 +424,8 @@ function layout(g){
   createGrid(g)
   positionGroups(g)
   adjustLogics(g)
-//   const r = addRouting(g)
-//   findPaths(g,r)
-//   adjustColSpacing(g,r)
-//   return r
+  const r = addRouting(g)
+  findPaths(g,r)
+  adjustColSpacing(g,r)
+  return r
 }

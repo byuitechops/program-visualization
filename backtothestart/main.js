@@ -1,7 +1,7 @@
 const svg = d3.select('body').append('svg')
 const $routes = svg.append('g').classed('routes',true)
-const $nodes = svg.append('g').classed('nodes',true)
 const $edges = svg.append('g').classed('edges',true)
+const $nodes = svg.append('g').classed('nodes',true)
 
 // Create the input graph
 const g = dagre.graphlib.json.read(reqTree)
@@ -80,16 +80,16 @@ function render(g){
     })
   _nodes.exit().remove()
 
-  _edges.enter().append('line')
+  _edges.enter().append('path')
     .attr('data-source',e => g.edge(e).v || e.v)
     .attr('data-target',e => g.edge(e).w || e.w)
     .attr('data-type',e => g.edge(e).type)
   .merge(_edges)
-    // .attr('d',e =>
-    //   'M'+g.node(e.v).x+','+g.node(e.v).y+' '+
-    //   g.edge(e).path.map(n => r.node(n).paths[g.edge(e).name]).map(({x,y}) => 'L'+x+','+y).join(' ')+
-    //   'L'+g.node(e.w).x+','+g.node(e.w).y+' '
-    // )
+    .attr('d',e =>
+      'M'+g.node(e.v).x+','+g.node(e.v).y+' '+
+      g.edge(e).path.map(n => r.node(n).paths[g.edge(e).name]).map(({x,y}) => 'L'+x+','+y).join(' ')+
+      'L'+g.node(e.w).x+','+g.node(e.w).y+' '
+    )
     .attr('x1',e => g.edge(e).x || g.node(e.v).x)
     .attr('y1',e => g.node(e.v).y)
     .attr('x2',e => g.edge(e).x || g.node(e.w).x-(g.node(e.w).width||0))
@@ -125,12 +125,12 @@ function routesrender(g,r){
 }
 
 
-svg.append('g').selectAll('rect')
-  .data(Object.values(cols).reduce((arr,col) => arr.concat(col.space.map(n => (n.x=col.x,n))),[]))
-  .enter().append('line')
-  .attr('x1',d => d.x)
-  .attr('x2',d => d.x)
-  .attr('y1',d => d[0])
-  .attr('y2',d => d[1])
-  .attr('stroke','maroon')
-  .attr('stroke-width',10)
+// svg.append('g').selectAll('rect')
+//   .data(Object.entries(spaces).reduce((arr,[x,spaces]) => arr.concat(spaces.map(n => (n.x=x,n))),[]))
+//   .enter().append('line')
+//   .attr('x1',d => d.x)
+//   .attr('x2',d => d.x)
+//   .attr('y1',d => d[0])
+//   .attr('y2',d => d[1])
+//   .attr('stroke','maroon')
+//   .attr('stroke-width',10)
