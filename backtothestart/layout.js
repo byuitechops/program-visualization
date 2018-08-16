@@ -69,10 +69,6 @@ function rundagre(g){
       clone.removeNode(child)
     })
   })
-  // One way to fix it, going to try something else tho
-  // g.sinks().filter(n => !g.parent(n) && g.node(n).type == 'course' && g.predecessors(n).length == 1).forEach(n => {
-  //   clone.inEdges(n).forEach(e => clone.edge(e).weight = 1.3)
-  // })
   window.clone = clone
   // layout the clone
   dagre.layout(clone)
@@ -372,7 +368,7 @@ function adjustColSpacing(g,r){
     Object.values(col.paths).sort((a,b) => a.span-b.span).reduce((slots,path) => {
       var j = 0
       // while there are collisions, move to the next layer
-      while(slots[j].some(existing => existing.min <= path.max && existing.max >= path.min)){
+      while(slots[j].some(existing => existing.min < path.max && existing.max > path.min)){
         ++j
         slots[j] = slots[j] || []
       }
