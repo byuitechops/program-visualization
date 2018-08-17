@@ -13,14 +13,25 @@
         fill:red; /* Color for Error */
       }
 
-      .nodes g[data-type="group"] rect {
-        /* stroke:#e9aaff; */
-        stroke-width:3px;
+      .groups rect {
         fill:none;
       }
+
+      .groups rect[data-grouptype="same parent"] {
+        /* stroke:#267F6F; */
+      }
+      .groups rect[data-grouptype="concurrent"] {
+        stroke:#dcadff;
+      }
       
-      .nodes g[data-type="course"] rect {
+      .nodes rect {
         fill:#00ffd0;
+      }
+      .nodes g.disabled rect {
+        fill:#CCC;
+      }
+      .nodes g.disabled text {
+        fill:#999;
       }
       .nodes g[data-type="logic"] circle {
         fill:white;
@@ -30,7 +41,7 @@
       }
       .nodes g.highlight rect{
         stroke:#003bff;
-        stroke-width:2px;
+        stroke-width:1px;
       }
       .nodes g.highlight circle{
         stroke:red;
@@ -79,6 +90,7 @@
     <script src="dagre.min.js"></script>
     <script src="ngraph.min.js"></script>
     <!-- Helpers -->
+    <script src="util.js"></script>
     <script src="layout.js"></script>
   </head>
   <body>

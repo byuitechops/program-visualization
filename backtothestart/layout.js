@@ -1,13 +1,30 @@
-function createGroups(g){
-  function group(name,children){
-    name = '{'+name+'}'
-    g.setNode(name,{
-      type:'group',
-      width:g.graph().nwidth,
-      height:children.length*g.graph().nheight+(children.length-1)*g.graph().nodesep
-    })
-    children.forEach(child => g.setParent(child,name))
+function group(name,children,grouptype){
+  var checked = []
+  function top(n){
+    if(g.parent(n) && !checked.includes(g.parent(n))){
+      // checks to make sure that the entire group is a sub group
+      if(!g.children(g.parent(n)).every(child => children.includes(child))){
+        throw new Error('Trying to create super group which does not contain all children')
+      } else {
+        g.node(g.parent(n)).level++
+        checked.push(g.parent(n))
+      }
+    }
+    return g.parent(n) ? top(g.parent(n)) : n
   }
+  name = '{'+name+'}'
+  g.setNode(name,{
+    type:'group',
+    grouptype:grouptype,
+    width:g.graph().nwidth,
+    height:children.reduce((sum,n) => sum+g.node(n).height,0)+(children.length-1)*g.graph().nodesep,
+    coursechildren:children,
+    level:0
+  })
+  children.map(child => top(child)).forEach(child => g.setParent(child,name))
+}
+
+function createGroups(g){
 
   // TODO: Look into using tarjan instead of findCycles
   dagre.graphlib.alg.findCycles(g).forEach(cycle => {
@@ -23,7 +40,7 @@ function createGroups(g){
         }
         return true
       })
-      // group(children.join(' '),children)
+      group(children.join(' '),children,'concurrent')
     }
   })
 
@@ -36,9 +53,11 @@ function createGroups(g){
     return parents
   },{})).forEach(([n,children]) => {
     if(children.length > 1){
-      group(n,children)
+      group(n,children,'same parent')
     }
   })
+
+  g.graph().groups = g.nodes().filter(n => g.node(n).type=='group').sort((a,b) => g.node(a).level-g.node(b).level)
 }
 
 function rundagre(g){
@@ -61,8 +80,7 @@ function rundagre(g){
     clone.predecessors(n).forEach(pre => clone.successors(n).forEach(suc => clone.setEdge(pre,suc,{})))
     clone.removeNode(n)
   })
-  var groups = g.nodes().filter(n => g.node(n).type=='group')
-  groups.forEach(n => {
+  g.graph().groups.forEach(n => {
     g.children(n).forEach(child => {
       clone.inEdges(child).forEach(({v,w}) => addEdge(v,n))
       clone.outEdges(child).forEach(({v,w}) => addEdge(n,w))
@@ -73,23 +91,33 @@ function rundagre(g){
   // layout the clone
   dagre.layout(clone)
 
-  groups.forEach(n => {
-    g.children(n).forEach(child => {
-      g.node(child).x = g.node(n).x
-      // temporary positions
-      g.node(child).y = g.node(n).y
+}
+
+function orderGroupChildren(g){
+  // What you don't like my one line recursive cacheing super confusing arrow function?! I'm offended
+  // var findneighbors = (n,checked={[n]:true},level=0) => level && g.node(n).type=='course' ? {n,level} : g.neighbors(n).filter(n => !checked[n]).reduce((arr,n) => (checked[n]=true,arr.concat(findneighbors(n,checked,level+1))),[])
+  // Temporarily assign the group children the same coordinates as their parents
+  g.graph().groups.forEach(parent => {
+    g.children(parent).forEach(child => {
+      g.node(child).x = g.node(parent).x
+      g.node(child).y = g.node(parent).y
     })
+  })
+  g.graph().groups.forEach(parent => {
+    g.children(parent).map(n => {
+      var i = findCourses(g,n,n => g.successors(n)).reduce((sum,n) => sum+(g.node(n).y-g.node(parent).y),0)
+      return {n,i}
+    })
+    .sort((a,b) => a.i-b.i)
+    .reduce((y,{n}) => {
+      g.node(n).y = y+g.node(n).height/2
+      return y+g.node(n).height+g.graph().nodesep
+      // console.log(n,g.node(n).y)
+    },g.node(parent).y-g.node(parent).height/2)
   })
 }
 
-function adjustLeafs(g){
-  function parents(n,first=true){
-    if(!first && g.node(n).type == 'course'){
-      return g.node(n)
-    } else {
-      return [].concat(...g.predecessors(n).map(n => parents(n,false)))
-    }
-  }
+function fixLeafNodes(g){
   const spaceheight = g.graph().nheight+g.graph().nodesep*2
   const split = (space,i,node) => space.splice(i,1,[space[i][0],node.y-(node.height/2)],[node.y+(node.height/2),space[i][1]])
   var leafs = g.sinks().filter(n => !g.parent(n) && g.node(n).type == 'course' && g.predecessors(n).length == 1)
@@ -106,8 +134,8 @@ function adjustLeafs(g){
   },{})
   leafs.forEach(n => {
     var node = g.node(n)
-    var p = parents(n)
-    var [sum,totalweight] = p.reduce(([sum,totalweight],parent) => {
+    var parents = findCourses(g,n,n => g.predecessors(n)).map(p => g.node(p))
+    var [sum,totalweight] = parents.reduce(([sum,totalweight],parent) => {
       var weight = (g.graph().nwidth+g.graph().ranksep)/(node.x-parent.x)
       return [sum+parent.y*weight,totalweight+=weight]
     },[0,0])
@@ -127,13 +155,10 @@ function adjustLeafs(g){
     mean = Math.min(mean,closest[1]-spaceheight/2)
     node.y = mean
     split(spaces[node.x],closesti,node)
-    // space.splice(i,1,[space[i][0],node.y-(node.height/2)],[node.y+(node.height/2),space[i][1]])
-    // closest[0]
-    // node.y = mean
   })
 }
 
-function positionLogics(g){
+function positionLogicsInLevels(g){
   var slots = []
   g.nodes().forEach(function ranker(n){
     if(g.node(n).type == 'logic' && g.node(n).x == undefined){
@@ -150,15 +175,12 @@ function positionLogics(g){
     levels.forEach((level,li) => {
       level.forEach(n => {
         g.node(n).x = sx+g.graph().layersep*(li+1)
-        var pres = g.predecessors(n)
-        // temporary position y
-        g.node(n).y = pres.map(n => g.node(n).y).reduce((a,b) => a+b,0)/pres.length
       })
     })
   })
 }
 
-function createGrid(g){
+function compileGrid(g){
   var grid = g.nodes().reduce((cols,n) => {
     cols[g.node(n).x] = cols[g.node(n).x] || {x:g.node(n).x,type:g.node(n).type,nodes:[]}
     cols[g.node(n).x].nodes.push(n)
@@ -175,25 +197,12 @@ function createGrid(g){
   g.graph().grid = grid
 }
 
-function positionGroups(g){
-  g.nodes().filter(n => g.node(n).type == 'group').forEach(parent => {
-    var children = g.children(parent).map(n => ({n}))
-    children.forEach(p => {
-      var neighbors = g.neighbors(p.n)
-      p.i = neighbors.reduce((sum,n) => sum+g.node(n).y-g.node(parent).y,0)
-    })
-    children.sort((a,b) => a.i-b.i)
-    children.forEach((p,i) => {
-      g.node(p.n).x = g.node(parent).x
-      g.node(p.n).y = g.node(parent).y-g.node(parent).height/2+g.node(p.n).height/2+i*(g.graph().nheight+g.graph().nodesep)
-    })
-  })
-}
-
 function adjustLogics(g){
   var cols = g.graph().grid.filter(col => col.type == 'course')
-  g.nodes().forEach(n => {
-    if(g.node(n).type == 'logic'){
+  var nodes = g.nodes().filter(n => g.node(n).type == 'logic')
+  var next = []
+  while(nodes.length){
+    nodes.forEach(n => {
       var ci = cols.findIndex(col => g.node(n).x < col.x)
       var pre = g.predecessors(n).filter(n => cols[ci-1].x <= g.node(n).x)
       var suc = g.successors(n).filter(n => g.node(n).x <= cols[ci].x)
@@ -203,13 +212,15 @@ function adjustLogics(g){
         g.node(n).y = csuc.reduce((sum,n) => sum+g.node(n).y,0)/csuc.length
       } else if(cpre.length && cpre.length == pre.length){
         g.node(n).y = cpre.reduce((sum,n) => sum+g.node(n).y,0)/cpre.length
-      } else {
+      } else if(pre.every(n => !isNaN(g.node(n).y)) && suc.every(n => !isNaN(g.node(n).y))){
         g.node(n).y = pre.concat(suc).reduce((sum,n) => sum+g.node(n).y,0)/(pre.length+suc.length)
+      } else {
+        next.push(n)
       }
-    } else if(g.node(n).type == 'course'){
-      lastCourseX = g.node(n).x
-    }
-  })
+    })
+    nodes = next.slice()
+    next = []
+  }
 }
 
 function addBridges(nodes,r){
@@ -270,7 +281,6 @@ function addRouting(g){
     r.node(exit).name = n
   })
   window.r = r
-
 
   // Create list of nodes sorted top to bottom
   var nodes = r.nodes()
@@ -342,7 +352,6 @@ function findPaths(g,r){
   r.nodes().filter(n => r.node(n).type != 'course' && Object.keys(r.node(n).paths).length==0).forEach(n => r.removeNode(n))
 }
 
-
 function adjustColSpacing(g,r){
   var cols = r.nodes().reduce((cols,n) => {
     var col = cols[r.node(n).x] = cols[r.node(n).x] || {type:r.node(n).type,nodes:[],paths:{},numLayer:0}
@@ -374,13 +383,16 @@ function adjustColSpacing(g,r){
   Object.entries(cols).sort((a,b) => a[0]-b[0]).map(n => n[1]).forEach((col,ci,arr) => {
     if(col.type=='course'){
       if(ci && arr[ci-1].type!='course'){
-        x += g.graph().ranksep/2
+        x += g.graph().ranksep/2 // buffer between the end of the logics and start of courses
       }
-      x += g.graph().nwidth
+      x += g.graph().nwidth // space for course width
       col.nodes.forEach((n,i) => {
-        r.node(n).x = x
+        r.node(n).x = x // the course column routes
         if(r.node(n).name){
-          g.node(r.node(n).name).x = x
+          // course node and each of it's parents (if any)
+          for(let m = r.node(n).name; m; m = g.parent(m)){
+            g.node(m).x = x
+          }
         }
         Object.keys(r.node(n).paths).forEach(name => {
           r.node(n).paths[name].x = x
@@ -390,12 +402,13 @@ function adjustColSpacing(g,r){
     } else {
       x += g.graph().layersep * col.numLayer
       col.nodes.forEach(n => {
-        r.node(n).x = x
+        r.node(n).x = x // the logic column routes
         if(r.node(n).name){
-          g.node(r.node(n).name).x = x
+          g.node(r.node(n).name).x = x // the logic nodes
         }
+        // Each of the lanes on the logic column
         Object.keys(r.node(n).paths).forEach(name => {
-          r.node(n).paths[name].x = x - (g.graph().layersep * (col.paths[name].layer+1))
+          r.node(n).paths[name].x = x - (g.graph().lanesep * (col.paths[name].layer+1))
         })
       })
       x += g.graph().layersep
@@ -407,10 +420,10 @@ function adjustColSpacing(g,r){
 function layout(g){
   createGroups(g)
   rundagre(g)
-  adjustLeafs(g)
-  positionLogics(g)
-  createGrid(g)
-  positionGroups(g)
+  orderGroupChildren(g)
+  fixLeafNodes(g)
+  positionLogicsInLevels(g)
+  compileGrid(g)
   adjustLogics(g)
   const r = addRouting(g)
   findPaths(g,r)
