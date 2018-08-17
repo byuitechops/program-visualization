@@ -13,7 +13,7 @@ const g = dagre.graphlib.json.read(reqTree)
     marginx:50,
     nwidth:100,
     nheight:20,
-    layersep:15,
+    layersep:5,
   })
 
 // Some Graph Adjustments, mostly temporary
@@ -28,8 +28,8 @@ g.removeNode('[]+')
 g.removeNode('[]*')
 
 const r = layout(g)
-// render(g,r)
-routesrender(g,r)
+render(g,r)
+// routesrender(g,r)
 
 function parents(n,highlight,first=true){
   d3.select(`[data-id="${n}"]`)

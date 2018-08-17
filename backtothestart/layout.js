@@ -267,7 +267,7 @@ function addRouting(g){
     r.node(rnode).type = g.node(n).type
     g.node(n).enter = rnode
     var exit = r.node(rnode).exit = g.node(n).exit = addNode(g.node(n).x,g.node(n).y,'exit')
-    r.node(exit).name = rnode
+    r.node(exit).name = n
   })
   window.r = r
 
@@ -295,12 +295,13 @@ function addRouting(g){
           ni && addEdge(memory[mi],created)
           return created
         })
-        for(let mi = getmi(node.x)+1; mi < memory.length && !r.node(memory[mi]).name; mi++){
+        for(let mi = getmi(node.x)+1; mi < memory.length; mi++){
           // connect to back
-          addEdge(node.n,memory[mi])
+          addEdge(node.exit||node.n,memory[mi])
+          if(r.node(memory[mi]).name) break;
         }
         for(let mi = getmi(node.x)-1; mi >= 0 && !r.node(memory[mi]).name; mi--){
-          // connect to back
+          // connect to front
           addEdge(memory[mi],node.n)
         }
       })
@@ -318,18 +319,16 @@ function findPaths(g,r){
   var rgraph = ngraph.graph()
   r.nodes().forEach(n => rgraph.addNode(n,r.node(n)))
   r.edges().forEach(e => rgraph.addLink(e.v,e.w,r.edge(e)))
-  var current,name,hasPermission,discount
+  var name,discount
   var PathFinder = ngraph.path.nba(rgraph,{
     distance(v,w,l){
-      hasPermission = v.id == current.v || v.id == current.w || w.id == current.v || w.id == current.w
-      discount = v.data.paths[name] && w.data.paths[name] ? 0.5 : 1
-      return (!l.data.isRed||hasPermission) ? l.data.weight*discount : Number.POSITIVE_INFINITY
+      discount = v.data.paths[name] && w.data.paths[name] ? 0.9 : 1
+      return l.data.weight*discount
     }
   })
   g.edges().forEach(e => {
     name = g.edge(e).name = e.v+'.'+g.edge(e).type
-    current = {v:g.node(e.v).route,w:g.node(e.w).route}
-    g.edge(e).path = PathFinder.find(g.node(e.w).route,g.node(e.v).route).map(n => n.id)
+    g.edge(e).path = PathFinder.find(g.node(e.w).enter,g.node(e.v).exit).map(n => n.id)
     g.edge(e).path.forEach(n => {
       if(!r.node(n).paths[name]){
         r.node(n).paths[name] = {
@@ -414,7 +413,7 @@ function layout(g){
   positionGroups(g)
   adjustLogics(g)
   const r = addRouting(g)
-  // findPaths(g,r)
-  // adjustColSpacing(g,r)
+  findPaths(g,r)
+  adjustColSpacing(g,r)
   return r
 }
