@@ -9,11 +9,11 @@ const g = dagre.graphlib.json.read(reqTree)
     rankdir:'LR',
     nodesep:5,
     edgesep:0,
-    ranksep:20,
+    ranksep:50,
     marginx:50,
     nwidth:100,
     nheight:20,
-    layersep:5,
+    layersep:15,
   })
 
 // Some Graph Adjustments, mostly temporary
@@ -28,6 +28,7 @@ g.removeNode('[]+')
 g.removeNode('[]*')
 
 const r = layout(g)
+// render(clone)
 render(g,r)
 // routesrender(g,r)
 
@@ -75,20 +76,20 @@ function render(g){
   enteringNodes.merge(_nodes)
     .attr('transform',n => {
       var node = g.node(n)
-      var x = node.type!='group' ? node.x : g.node(g.children(n)[0]).x
-      return `translate(${[x-(node.width||0),node.y-(node.height||0)/2]})`
+      !node.y && console.log(n,node)
+      return `translate(${[node.x-(node.width||0),node.y-(node.height||0)/2]})`
     })
   _nodes.exit().remove()
 
-  _edges.enter().append('path')
+  _edges.enter().append('line')
     .attr('data-source',e => g.edge(e).v || e.v)
     .attr('data-target',e => g.edge(e).w || e.w)
     .attr('data-type',e => g.edge(e).type)
   .merge(_edges)
-    .attr('d',e =>
-      g.edge(e).path.map(n => r.node(n).paths[g.edge(e).name]).map(({x,y},i) => (i?'L':'M')+x+','+y).join(' ')+
-      'L'+g.node(e.w).x+','+g.node(e.w).y
-    )
+    // .attr('d',e =>
+    //   g.edge(e).path.map(n => r.node(n).paths[g.edge(e).name]).map(({x,y},i) => (i?'L':'M')+x+','+y).join(' ')+
+    //   'L'+g.node(e.w).x+','+g.node(e.w).y
+    // )
     .attr('x1',e => g.edge(e).x || g.node(e.v).x)
     .attr('y1',e => g.node(e.v).y)
     .attr('x2',e => g.edge(e).x || g.node(e.w).x-(g.node(e.w).width||0))
