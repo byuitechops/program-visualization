@@ -2,6 +2,7 @@ const svg = d3.select('body').append('svg')
 const $routes = svg.append('g').classed('routes',true)
 const $edges = svg.append('g').classed('edges',true)
 const $nodes = svg.append('g').classed('nodes',true)
+const $groups = svg.append('g').classed('groups',true)
 
 // Create the input graph
 const g = dagre.graphlib.json.read(reqTree)
@@ -9,11 +10,12 @@ const g = dagre.graphlib.json.read(reqTree)
     rankdir:'LR',
     nodesep:5,
     edgesep:0,
-    ranksep:50,
+    ranksep:20,
     marginx:50,
     nwidth:100,
     nheight:20,
-    layersep:15,
+    layersep:5,
+    lanesep:4,
   })
 
 // Some Graph Adjustments, mostly temporary
@@ -54,14 +56,17 @@ function children(n,highlight,first=true){
 function render(g){
   // Create Joined Data selections
   var _nodes = $nodes.selectAll('g')
-    .data(g.nodes(),function(d){ return d ? d : this.getAttribute('data-id') })
+    .data(g.nodes().filter(n => g.node(n).type!='group'),function(d){ return d ? d : this.getAttribute('data-id') })
   var _edges = $edges.selectAll('path')
     .data(g.edges(),function(d){ return d ? d.v+'-'+d.w : this.getAttribute('data-source')+'-'+this.getAttribute('data-target') })
-
+  var _groups = $groups.selectAll('rect')
+    .data(g.graph().groups,function(d){ return d ? d : this.getAttribute('data-id') })
+    
   // Update elements with the new calculations
   var enteringNodes = _nodes.enter().append('g')
     .attr('data-id',n => n)
     .attr('data-type',n => g.node(n).type)
+    .classed('disabled',n => g.predecessors(n).length)
     .on('mouseover',n => {parents(n,true);children(n,true)})
     .on('mouseout',n => {parents(n,false);children(n,false)})
   var courseNodes = enteringNodes.filter(n => g.node(n).type=='course' || g.node(n).type=='group')
@@ -76,29 +81,41 @@ function render(g){
   enteringNodes.merge(_nodes)
     .attr('transform',n => {
       var node = g.node(n)
-      !node.y && console.log(n,node)
       return `translate(${[node.x-(node.width||0),node.y-(node.height||0)/2]})`
     })
   _nodes.exit().remove()
 
-  _edges.enter().append('line')
+  _edges.enter().append('path')
     .attr('data-source',e => g.edge(e).v || e.v)
     .attr('data-target',e => g.edge(e).w || e.w)
     .attr('data-type',e => g.edge(e).type)
   .merge(_edges)
-    // .attr('d',e =>
-    //   g.edge(e).path.map(n => r.node(n).paths[g.edge(e).name]).map(({x,y},i) => (i?'L':'M')+x+','+y).join(' ')+
-    //   'L'+g.node(e.w).x+','+g.node(e.w).y
-    // )
+    .attr('d',e =>
+      g.edge(e).path.map(n => r.node(n).paths[g.edge(e).name]).map(({x,y},i) => (i?'L':'M')+x+','+y).join(' ')+
+      'L'+g.node(e.w).x+','+g.node(e.w).y
+    )
     .attr('x1',e => g.edge(e).x || g.node(e.v).x)
     .attr('y1',e => g.node(e.v).y)
     .attr('x2',e => g.edge(e).x || g.node(e.w).x-(g.node(e.w).width||0))
     .attr('y2',e => g.node(e.w).y)
   _edges.exit().remove()
 
+  var thickness = 2
+  _groups.enter().append('rect')
+    .attr('data-id',n => n)
+    .attr('data-type',n => g.node(n).type)
+    .attr('data-grouptype',n => g.node(n).grouptype)
+    .attr('stroke-width',thickness)
+  .merge(_groups)
+    .attr('x',n => g.node(n).x-g.graph().nwidth+thickness/2)
+    .attr('y',n => g.node(n).y-g.node(n).height/2-thickness/2)
+    .attr('width',n => g.node(n).width-thickness)
+    .attr('height',n => g.node(n).height+thickness)
+  _groups.exit().remove()
+
   svg
     .attr('width',g.graph().width)
-    .attr('height',g.graph().height)
+    .attr('height',g.graph().height+g.graph().nodesep)
 }
 
 function routesrender(g,r){

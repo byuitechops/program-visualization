@@ -199,20 +199,28 @@ function compileGrid(g){
 
 function adjustLogics(g){
   var cols = g.graph().grid.filter(col => col.type == 'course')
-  g.nodes().filter(n => g.node(n).type == 'logic').forEach(n => {
-    var ci = cols.findIndex(col => g.node(n).x < col.x)
-    var pre = g.predecessors(n).filter(n => cols[ci-1].x <= g.node(n).x)
-    var suc = g.successors(n).filter(n => g.node(n).x <= cols[ci].x)
-    var cpre = pre.filter(n => g.node(n).type == 'course')
-    var csuc = suc.filter(n => g.node(n).type == 'course')
-    if(csuc.length && csuc.length == suc.length){
-      g.node(n).y = csuc.reduce((sum,n) => sum+g.node(n).y,0)/csuc.length
-    } else if(cpre.length && cpre.length == pre.length){
-      g.node(n).y = cpre.reduce((sum,n) => sum+g.node(n).y,0)/cpre.length
-    } else {
-      g.node(n).y = pre.concat(suc).reduce((sum,n) => sum+g.node(n).y,0)/(pre.length+suc.length)
-    }
-  })
+  var nodes = g.nodes().filter(n => g.node(n).type == 'logic')
+  var next = []
+  while(nodes.length){
+    nodes.forEach(n => {
+      var ci = cols.findIndex(col => g.node(n).x < col.x)
+      var pre = g.predecessors(n).filter(n => cols[ci-1].x <= g.node(n).x)
+      var suc = g.successors(n).filter(n => g.node(n).x <= cols[ci].x)
+      var cpre = pre.filter(n => g.node(n).type == 'course')
+      var csuc = suc.filter(n => g.node(n).type == 'course')
+      if(csuc.length && csuc.length == suc.length){
+        g.node(n).y = csuc.reduce((sum,n) => sum+g.node(n).y,0)/csuc.length
+      } else if(cpre.length && cpre.length == pre.length){
+        g.node(n).y = cpre.reduce((sum,n) => sum+g.node(n).y,0)/cpre.length
+      } else if(pre.every(n => !isNaN(g.node(n).y)) && suc.every(n => !isNaN(g.node(n).y))){
+        g.node(n).y = pre.concat(suc).reduce((sum,n) => sum+g.node(n).y,0)/(pre.length+suc.length)
+      } else {
+        next.push(n)
+      }
+    })
+    nodes = next.slice()
+    next = []
+  }
 }
 
 function addBridges(nodes,r){
@@ -273,7 +281,6 @@ function addRouting(g){
     r.node(exit).name = n
   })
   window.r = r
-
 
   // Create list of nodes sorted top to bottom
   var nodes = r.nodes()
@@ -345,7 +352,6 @@ function findPaths(g,r){
   r.nodes().filter(n => r.node(n).type != 'course' && Object.keys(r.node(n).paths).length==0).forEach(n => r.removeNode(n))
 }
 
-
 function adjustColSpacing(g,r){
   var cols = r.nodes().reduce((cols,n) => {
     var col = cols[r.node(n).x] = cols[r.node(n).x] || {type:r.node(n).type,nodes:[],paths:{},numLayer:0}
@@ -377,13 +383,16 @@ function adjustColSpacing(g,r){
   Object.entries(cols).sort((a,b) => a[0]-b[0]).map(n => n[1]).forEach((col,ci,arr) => {
     if(col.type=='course'){
       if(ci && arr[ci-1].type!='course'){
-        x += g.graph().ranksep/2
+        x += g.graph().ranksep/2 // buffer between the end of the logics and start of courses
       }
-      x += g.graph().nwidth
+      x += g.graph().nwidth // space for course width
       col.nodes.forEach((n,i) => {
-        r.node(n).x = x
+        r.node(n).x = x // the course column routes
         if(r.node(n).name){
-          g.node(r.node(n).name).x = x
+          // course node and each of it's parents (if any)
+          for(let m = r.node(n).name; m; m = g.parent(m)){
+            g.node(m).x = x
+          }
         }
         Object.keys(r.node(n).paths).forEach(name => {
           r.node(n).paths[name].x = x
@@ -393,12 +402,13 @@ function adjustColSpacing(g,r){
     } else {
       x += g.graph().layersep * col.numLayer
       col.nodes.forEach(n => {
-        r.node(n).x = x
+        r.node(n).x = x // the logic column routes
         if(r.node(n).name){
-          g.node(r.node(n).name).x = x
+          g.node(r.node(n).name).x = x // the logic nodes
         }
+        // Each of the lanes on the logic column
         Object.keys(r.node(n).paths).forEach(name => {
-          r.node(n).paths[name].x = x - (g.graph().layersep * (col.paths[name].layer+1))
+          r.node(n).paths[name].x = x - (g.graph().lanesep * (col.paths[name].layer+1))
         })
       })
       x += g.graph().layersep
@@ -414,9 +424,9 @@ function layout(g){
   fixLeafNodes(g)
   positionLogicsInLevels(g)
   compileGrid(g)
-  // adjustLogics(g)
-  // const r = addRouting(g)
-  // findPaths(g,r)
-  // adjustColSpacing(g,r)
-  // return r
+  adjustLogics(g)
+  const r = addRouting(g)
+  findPaths(g,r)
+  adjustColSpacing(g,r)
+  return r
 }
