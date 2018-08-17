@@ -60,3 +60,35 @@ function routesrender(r){
   //     .attr('cx',n => r.node(n).x)
   //     .attr('cy',n => r.node(n).y)
 }
+
+if(ni == 0){
+  memory = memory.map(x => addNode(x,node.y))
+}
+for(var mi = 0,created,i; mi < memory.length; ++mi){
+  i = ci-memory.length+mi
+  created = grid[i].x == node.x ? node.n : addNode(grid[i].x,node.y)
+  addEdge(memory[mi],created)
+  if(mi!=0){
+    if(r.node(memory[mi-1]).name!==undefined){
+      if(memory[mi-1]==node.n){
+        g.node(node.name).enter = created
+      }
+    } else {
+      // addEdge(created,node.n)
+      // addEdge(memory[mi-1],created)
+    }
+  }
+  memory[mi] = created
+}
+// Front node connections
+if(grid[ci-memory.length-1].x == node.x){
+  if(node.type == 'bridge'){
+    addEdge(node.n,memory[0])
+  } else {
+    g.node(node.name).enter = memory[0]
+  }
+}
+// // Back node connections
+if(grid[ci].x == node.x){
+  addEdge(memory[memory.length-1],node.n)
+}

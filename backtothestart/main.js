@@ -9,11 +9,11 @@ const g = dagre.graphlib.json.read(reqTree)
     rankdir:'LR',
     nodesep:5,
     edgesep:0,
-    ranksep:50,
+    ranksep:20,
     marginx:50,
     nwidth:100,
     nheight:20,
-    layersep:5,
+    layersep:15,
   })
 
 // Some Graph Adjustments, mostly temporary
@@ -28,8 +28,8 @@ g.removeNode('[]+')
 g.removeNode('[]*')
 
 const r = layout(g)
-render(g,r)
-// routesrender(g,r)
+// render(g,r)
+routesrender(g,r)
 
 function parents(n,highlight,first=true){
   d3.select(`[data-id="${n}"]`)
@@ -86,9 +86,8 @@ function render(g){
     .attr('data-type',e => g.edge(e).type)
   .merge(_edges)
     .attr('d',e =>
-      'M'+g.node(e.v).x+','+g.node(e.v).y+' '+
-      g.edge(e).path.map(n => r.node(n).paths[g.edge(e).name]).map(({x,y}) => 'L'+x+','+y).join(' ')+
-      'L'+g.node(e.w).x+','+g.node(e.w).y+' '
+      g.edge(e).path.map(n => r.node(n).paths[g.edge(e).name]).map(({x,y},i) => (i?'L':'M')+x+','+y).join(' ')+
+      'L'+g.node(e.w).x+','+g.node(e.w).y
     )
     .attr('x1',e => g.edge(e).x || g.node(e.v).x)
     .attr('y1',e => g.node(e.v).y)
@@ -115,7 +114,7 @@ function routesrender(g,r){
     .data(r.nodes())
     .enter().append('circle')
       .attr('data-id',n => n)
-      .attr('fill',n => ({route:'#CCC',course:'#00ffd0',logic:'red',bridge:'purple'})[r.node(n).type])
+      .attr('fill',n => ({route:'#CCC',course:'#00ffd0',logic:'red',bridge:'purple',side:'none'})[r.node(n).type])
       .attr('r',n => r.node(n).type=='route' ? 2 : 2)
       .attr('cx',n => r.node(n).x)
       .attr('cy',n => r.node(n).y)

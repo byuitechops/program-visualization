@@ -104,8 +104,6 @@ function adjustLeafs(g){
     }
     return cols
   },{})
-  window.spaces = spaces
-  console.log(spaces)
   leafs.forEach(n => {
     var node = g.node(n)
     var p = parents(n)
@@ -124,7 +122,6 @@ function adjustLeafs(g){
         }
       }
     }
-    console.log(n,closesti,spaces[node.x][closesti])
     var closest = spaces[node.x][closesti]
     mean = Math.max(mean,closest[0]+spaceheight/2)
     mean = Math.min(mean,closest[1]-spaceheight/2)
@@ -229,7 +226,7 @@ function addBridges(nodes,r){
   }
   // Add in the 'mid' nodes
   nodes.filter(n => n.type == 'course')
-    .concat(cols.map(col => ({x:col.x,y:r.graph().height,n:'bottom'})))
+    .concat(cols.map(col => ({x:col.x,y:r.graph().height,n:col.x+'.bottom'})))
     .reduce((lasts,node) => {
       var count = (node.y-lasts[node.x].y)/slotsize
       if(count > 1){
@@ -241,30 +238,39 @@ function addBridges(nodes,r){
       }
       lasts[node.x] = node
       return lasts
-  },cols.reduce((lasts,col) => (lasts[col.x]={x:col.x,y:0,n:'top'},lasts),{}))
+  },cols.reduce((lasts,col) => (lasts[col.x]={x:col.x,y:0,n:col.x+'.top'},lasts),{}))
+
+  // Need to sort again cause the mid nodes are all at the back
+  // TODO: splice in the nodes where they fit in as it is going along
+  nodes.sort((a,b) => a.y-b.y)
 }
 
 function addRouting(g){
-  const r = new dagre.graphlib.Graph({directed:false})
-  r.setGraph(g.graph())
-  g.nodes().filter(n => g.node(n).type!='group').forEach(n => {
-    var rnode = addNode(g.node(n).x,g.node(n).y)
-    g.node(n).exit = rnode
-    r.node(rnode).name = n
-    r.node(rnode).type = g.node(n).type
-  })
-  window.r = r
-
-  function addNode(x,y){
-    var n = Math.round(x)+','+Math.round(y)
+  function addNode(x,y,side){
+    var n = Math.round(x)+','+Math.round(y)+(side?'.'+side:'')
     if(r.node(n)!==undefined) return n;
-    r.setNode(n,{x:x,y:y,type:'route',paths:{}})
+    r.setNode(n,{x:x,y:y,type:side?'side':'route',paths:{},side:side})
     return n
   }
   function addEdge(p1,p2){
     if(p1 == p2) return;
+    if(!r.node(p1)){ throw new Error(p1+' doesn\'t exist')}
+    if(!r.node(p2)){ throw new Error(p2+' doesn\'t exist')}
     r.setEdge(p1,p2,{weight:Math.abs(r.node(p1).x-r.node(p2).x)+Math.abs(r.node(p1).y-r.node(p2).y)})
   }
+  
+  const r = new dagre.graphlib.Graph({directed:false})
+  r.setGraph(g.graph())
+  g.nodes().filter(n => g.node(n).type!='group').forEach(n => {
+    var rnode = addNode(g.node(n).x,g.node(n).y)
+    r.node(rnode).name = n
+    r.node(rnode).type = g.node(n).type
+    g.node(n).enter = rnode
+    var exit = r.node(rnode).exit = g.node(n).exit = addNode(g.node(n).x,g.node(n).y,'exit')
+    r.node(exit).name = rnode
+  })
+  window.r = r
+
 
   // Create list of nodes sorted top to bottom
   var nodes = r.nodes()
@@ -273,46 +279,29 @@ function addRouting(g){
 
   addBridges(nodes,r)
 
-  // Need to sort again cause the mid nodes are all at the back
-  // TODO: splice in the nodes where they fit in as it is going along
-  nodes.sort((a,b) => a.y-b.y)
-
-  // Used to know the x and type of each column
-  var grid = r.graph().grid
   var memory = []
-  grid.forEach((col,ci) => {
+  r.graph().grid.forEach((col,ci) => {
     if(col.type=='course' && memory.length){
       /* Node connections */
-      nodes.filter(node => node.x >= grid[ci-memory.length-1].x && node.x <= col.x).forEach((node,ni) => {
-        if(ni == 0){
-          memory = memory.map(x => addNode(x,node.y))
+      nodes.filter(node => !node.side && node.x >= r.graph().grid[ci-memory.length-1].x && node.x <= col.x).forEach((node,ni) => {
+        // var back = r.graph().grid[ci-memory.length-1].x == node.x ? node.n : null
+        var back = r.graph().grid[ci-memory.length-1].x == node.x ? (node.type=='bridge'?node.n:node.exit) : null
+        // var front = node.n
+        var front = r.graph().grid[ci-memory.length-1].x != node.x ? node.n : null
+        var x = mi => r.graph().grid[ci-memory.length+mi].x
+        var getmi = x => r.graph().grid.findIndex(col=>col.x==x)-(ci-memory.length)
+        memory = memory.map((mem,mi) => {
+          created = addNode(x(mi),node.y)
+          ni && addEdge(memory[mi],created)
+          return created
+        })
+        for(let mi = getmi(node.x)+1; mi < memory.length && !r.node(memory[mi]).name; mi++){
+          // connect to back
+          addEdge(node.n,memory[mi])
         }
-        for(var mi = 0,created,i; mi < memory.length; ++mi){
-          i = ci-memory.length+mi
-          created = grid[i].x == node.x ? node.n : addNode(grid[i].x,node.y)
-          addEdge(memory[mi],created)
-          if(mi!=0){
-            if(r.node(memory[mi-1]).name!==undefined){
-              if(memory[mi-1]==node.n){
-                g.node(node.name).enter = created
-              }
-            } else {
-              addEdge(memory[mi-1],created)
-            }
-          }
-          memory[mi] = created
-        }
-        // Front node connections
-        if(grid[ci-memory.length-1].x == node.x){
-          if(node.type == 'bridge'){
-            addEdge(node.n,memory[0])
-          } else {
-            g.node(node.name).enter = memory[0]
-          }
-        }
-        // Back node connections
-        if(grid[ci].x == node.x){
-          addEdge(memory[memory.length-1],node.n)
+        for(let mi = getmi(node.x)-1; mi >= 0 && !r.node(memory[mi]).name; mi--){
+          // connect to back
+          addEdge(memory[mi],node.n)
         }
       })
       memory = []
@@ -327,16 +316,20 @@ function addRouting(g){
 function findPaths(g,r){
   // copy the graph
   var rgraph = ngraph.graph()
-  r.nodes().forEach(n => rgraph.addNode(n))
-  r.edges().forEach(e => rgraph.addLink(e.v,e.w))
+  r.nodes().forEach(n => rgraph.addNode(n,r.node(n)))
+  r.edges().forEach(e => rgraph.addLink(e.v,e.w,r.edge(e)))
+  var current,name,hasPermission,discount
   var PathFinder = ngraph.path.nba(rgraph,{
-    distance(v,w){
-      return r.edge(v.id,w.id).weight
+    distance(v,w,l){
+      hasPermission = v.id == current.v || v.id == current.w || w.id == current.v || w.id == current.w
+      discount = v.data.paths[name] && w.data.paths[name] ? 0.5 : 1
+      return (!l.data.isRed||hasPermission) ? l.data.weight*discount : Number.POSITIVE_INFINITY
     }
   })
-  g.edges().forEach(e => { 
-    var name = g.edge(e).name = e.v+'.'+g.edge(e).type
-    g.edge(e).path = PathFinder.find(g.node(e.w).exit,g.node(e.v).enter).map(n => n.id)
+  g.edges().forEach(e => {
+    name = g.edge(e).name = e.v+'.'+g.edge(e).type
+    current = {v:g.node(e.v).route,w:g.node(e.w).route}
+    g.edge(e).path = PathFinder.find(g.node(e.w).route,g.node(e.v).route).map(n => n.id)
     g.edge(e).path.forEach(n => {
       if(!r.node(n).paths[name]){
         r.node(n).paths[name] = {
@@ -421,7 +414,7 @@ function layout(g){
   positionGroups(g)
   adjustLogics(g)
   const r = addRouting(g)
-  findPaths(g,r)
-  adjustColSpacing(g,r)
+  // findPaths(g,r)
+  // adjustColSpacing(g,r)
   return r
 }
