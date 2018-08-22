@@ -90,17 +90,18 @@ function render(g){
     .attr('data-target',e => g.edge(e).w || e.w)
     .attr('data-type',e => g.edge(e).type)
   .merge(_edges)
-    .attr('d',e =>
-      g.edge(e).path.map(n => r.node(n).paths[g.edge(e).name]).map(({x,y},i) => (i?'L':'M')+x+','+y).join(' ')+
-      'L'+g.node(e.w).x+','+g.node(e.w).y
-    )
+    .attr('d',e => {
+      var lasty
+      return g.edge(e).path.map(n => r.node(n).paths[g.edge(e).name]).map(({x,y},i) => (lasty=y,(i?'L':'M')+x+','+y)).join(' ')
+      +'L'+g.node(e.w).x+','+lasty
+    })
     .attr('x1',e => g.edge(e).x || g.node(e.v).x)
     .attr('y1',e => g.node(e.v).y)
     .attr('x2',e => g.edge(e).x || g.node(e.w).x-(g.node(e.w).width||0))
     .attr('y2',e => g.node(e.w).y)
   _edges.exit().remove()
 
-  var thickness = 2
+  var thickness = 2.5
   _groups.enter().append('rect')
     .attr('data-id',n => n)
     .attr('data-type',n => g.node(n).type)
@@ -111,6 +112,8 @@ function render(g){
     .attr('y',n => g.node(n).y-g.node(n).height/2-thickness/2)
     .attr('width',n => g.node(n).width-thickness)
     .attr('height',n => g.node(n).height+thickness)
+    .on('mouseover',n => {g.children(n).forEach(n => parents(n,true),children(n,true))})
+    .on('mouseout',n => {g.children(n).forEach(n => parents(n,false),children(n,false))})
   _groups.exit().remove()
 
   svg
@@ -119,6 +122,7 @@ function render(g){
 }
 
 function routesrender(g,r){
+  // r.nodes().filter(n => r.node(n).type=='exit').forEach(n => r.node(n).x+=3)
   $routes.append('g').selectAll('line')
     .data(r.edges())
     .enter().append('line')
@@ -132,8 +136,8 @@ function routesrender(g,r){
     .data(r.nodes())
     .enter().append('circle')
       .attr('data-id',n => n)
-      .attr('fill',n => ({route:'#CCC',course:'#00ffd0',logic:'red',bridge:'purple',side:'none'})[r.node(n).type])
-      .attr('r',n => r.node(n).type=='route' ? 2 : 2)
+      .attr('fill',n => ({route:'#CCC',course:'#00ffd0',logic:'red',bridge:'purple',exit:'none'})[r.node(n).type])
+      .attr('r',n => ({route:2,exit:1})[r.node(n).type]||2)
       .attr('cx',n => r.node(n).x)
       .attr('cy',n => r.node(n).y)
   svg
