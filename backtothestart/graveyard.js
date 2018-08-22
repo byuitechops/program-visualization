@@ -92,3 +92,143 @@ if(grid[ci-memory.length-1].x == node.x){
 if(grid[ci].x == node.x){
   addEdge(memory[memory.length-1],node.n)
 }
+
+
+  // Find the starts and ends of each horizontal path
+Object.entries(grid.rows).forEach(([y,row]) => { 
+  Object.entries(row.paths).forEach(([name,path]) => {
+    var connections = {}
+    path.nodes.forEach(n => {
+      connections[n] = connections[n] || [n]
+      r.node(n).paths[name].edges.forEach(edge => {
+        [edge.prev,edge.next].forEach(near => {
+          if(connections[near] && connections[n] != connections[near]){
+            connections[near].forEach(m => {
+              !connections[n].includes(m) && connections[n].push(m)
+              connections[m] = connections[n]
+            })
+          } else {
+            !connections[n].includes(near) && connections[n].push(near)
+            connections[near] = connections[n]
+          }
+        })
+      })
+    })
+    Object.values(connections).filter((n,i,a) => i==a.indexOf(n)).forEach(section => {
+      section.reduce()
+    })
+  })
+})
+
+
+Object.values(grid.rows).forEach(row => {
+  Object.entries(row.paths).filter(([name,path]) => path.start != path.end).forEach(([name,path]) => {
+    var before
+    var after = []
+    
+    r.node(path.start).paths[name].edges
+      .map(e => g.edge(e).path)
+      .filter(route => route.includes(path.start) && route.includes(path.end))
+      .forEach(route => {
+        var last = route[route.indexOf(path.start)-1]
+        var next = route[route.indexOf(path.end)+1]
+        next && !after.includes(next) && after.push(next)
+        if(before && last != before){
+          throw new Error ('Coming from multiple places')
+        } else {
+          before = last
+        }
+      })
+    name == 'FDSCI101.pre' && console.log(path,before,after)
+  })
+})
+
+connections[n] = connections[n] || [n]
+r.node(n).paths[name].edges.forEach(edge => {
+  [edge.prev,edge.next].filter(n => n).forEach(near => {
+    if(connections[near] && connections[n] != connections[near]){
+      connections[near].forEach(m => {
+        !connections[n].includes(m) && connections[n].push(m)
+        connections[m] = connections[n]
+      })
+    } else {
+      !connections[n].includes(near) && connections[n].push(near)
+      connections[near] = connections[n]
+    }
+  })
+})
+
+Object.entries(grid.rows).forEach(([y,row]) => {
+  Object.entries(row.paths).forEach(([name,path]) => {
+    row.paths[name] = Object.values(path).filter((n,i,a) => i==a.indexOf(n)).map(section => ({
+      nodes:section,
+      pull:section.reduce((sum,n) => {
+        // console.log(name,r.node(n).x,grid.cols[r.node(n).x].paths)
+        var col = grid.cols[r.node(n).x]
+        var weight = (col.numLayer - col.paths[name].layer)*dir(r.node(n).y-y)
+        // console.log((col.numLayer - col.paths[name].layer),dir(r.node(n).y-y),weight)
+        return sum+weight
+      },0)
+    }))
+    console.log(row.paths[name])
+  })
+  Object.entries(row.paths).forEach(([name,path]) => {
+    // console.log(path)
+  })
+})
+
+var horzpath = row.paths[name] = row.paths[name] || {friends:new Set()}
+r.node(n).paths[name].edges.forEach(edge => {
+  edge.prev && r.node(edge.prev).y != r.node(n).y && horzpath.friends.add(edge.prev)
+  edge.next && r.node(edge.next).y != r.node(n).y && horzpath.friends.add(edge.next)
+})
+
+Object.entries(grid.rows).forEach(([y,row]) => {
+  Object.entries(row.paths).forEach(([name,path]) => {
+    path.friends = Array.from(path.friends)
+    path.pull = path.friends.reduce((sum,n) => {
+      var col = grid.cols[r.node(n).x]
+      return sum+(col.numLayer - col.paths[name].layer)*dir(r.node(n).y-y)
+    },0)
+  })
+  Object.values(row.paths).sort((a,b) => a.pull-b.pull).forEach((path,level) => {
+
+  })
+  // Object.entries(row.paths).forEach(([name,path]) => {
+  //   console.log(path)
+  // })
+})
+
+Object.entries(row.nodes).map(([name,path]) => {
+  return Object.values(path).filter((n,i,a) => i==a.indexOf(n)).map(segment => ({
+    nodes:segment,
+    pull:segment.reduce((sum,n) => {
+      var col = grid.cols[r.node(n).x]
+      return sum+(col.numLayer - col.paths[name].layer)*dir(r.node(n).y-y)
+    },0),
+    min:Math.min(...segment.map(n => r.node(n).x)),
+    max:Math.max(...segment.map(n => r.node(n).x)),
+    name:name,
+  }))
+},[]).forEach(segment => {
+  console.log(segment)
+  segment.sort((a,b) => a.pull-b.pull)
+  var numLayer = calculateLanes(segment)
+  segment.forEach(path => {
+    path.nodes.filter(n => r.node(n).y==y).forEach(n => {
+      r.node(n).paths[path.name].y += g.graph().lanesep * path.layer//-(path.numLayer-1)/2)
+    })
+  })
+})
+
+if(segments[m]){
+  Object.entries(segments[m].paths).forEach(([name,path]) => {
+    if(segments[n].paths[name]){
+      path.nodes.forEach(n => segments[n].paths[name].nodes.add(n))
+      // segments[n].paths[name].nodes.push(...path.nodes)
+    } else {
+      segments[n].paths[name] = path
+      segments[n].paths[name].nodes.add(n)
+    }
+  })
+}

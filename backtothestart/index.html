@@ -22,6 +22,8 @@
       }
       .groups rect[data-grouptype="concurrent"] {
         stroke:#dcadff;
+        fill:#dcadff;
+        fill-opacity: 0;
       }
       
       .nodes rect {
@@ -51,6 +53,7 @@
         stroke:none; /* Color for Error */
         stroke-width: 1.5px;
         fill:none;
+        /* stroke-opacity: 0.5; */
       }
       .edges [data-type="pre"]{
         stroke: #AAA;
@@ -64,14 +67,17 @@
       .edges [data-type="co"].highlight{
         stroke: #ff3f00;
       }
+      /* .edges [data-type="co"]{
+        stroke: #C19DC0;
+      }
+      .edges [data-type="co"].highlight{
+        stroke: #4B056B;
+      } */
       .edges [data-type="concur"]{
         stroke: purple;
       }
       .edges [data-type="path"]{
         stroke: lightcoral;
-      }
-      .edges [data-type="route"]{
-        stroke: #CCC;
       }
       .edges .highlight {
         stroke-opacity:1;
@@ -79,8 +85,9 @@
       .routes line{
         stroke:black;
         /* stroke:#CCC; */
+        /* stroke:red; */
         stroke-width:1;
-        stroke-opacity: 0.1;
+        stroke-opacity: .2;
       }
     </style>
     <!-- Data -->

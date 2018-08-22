@@ -17,7 +17,7 @@ function group(name,children,grouptype){
     type:'group',
     grouptype:grouptype,
     width:g.graph().nwidth,
-    height:children.reduce((sum,n) => sum+g.node(n).height,0)+(children.length-1)*g.graph().nodesep,
+    height:children.reduce((sum,n) => sum+g.node(n).height,0)+(children.length-1)*g.graph().nodesep*(grouptype=='same parent'),
     coursechildren:children,
     level:0
   })
@@ -90,12 +90,9 @@ function rundagre(g){
   window.clone = clone
   // layout the clone
   dagre.layout(clone)
-
 }
 
 function orderGroupChildren(g){
-  // What you don't like my one line recursive cacheing super confusing arrow function?! I'm offended
-  // var findneighbors = (n,checked={[n]:true},level=0) => level && g.node(n).type=='course' ? {n,level} : g.neighbors(n).filter(n => !checked[n]).reduce((arr,n) => (checked[n]=true,arr.concat(findneighbors(n,checked,level+1))),[])
   // Temporarily assign the group children the same coordinates as their parents
   g.graph().groups.forEach(parent => {
     g.children(parent).forEach(child => {
@@ -111,8 +108,7 @@ function orderGroupChildren(g){
     .sort((a,b) => a.i-b.i)
     .reduce((y,{n}) => {
       g.node(n).y = y+g.node(n).height/2
-      return y+g.node(n).height+g.graph().nodesep
-      // console.log(n,g.node(n).y)
+      return y+g.node(n).height+g.graph().nodesep*(g.node(parent).grouptype=='same parent')
     },g.node(parent).y-g.node(parent).height/2)
   })
 }
@@ -237,7 +233,7 @@ function addBridges(nodes,r){
   }
   // Add in the 'mid' nodes
   nodes.filter(n => n.type == 'course')
-    .concat(cols.map(col => ({x:col.x,y:r.graph().height,n:col.x+'.bottom'})))
+    .concat(cols.map(col => ({x:col.x,y:r.graph().height+g.graph().nheight/2+r.graph().nodesep,n:col.x+'.bottom'})))
     .reduce((lasts,node) => {
       var count = (node.y-lasts[node.x].y)/slotsize
       if(count > 1){
@@ -249,7 +245,7 @@ function addBridges(nodes,r){
       }
       lasts[node.x] = node
       return lasts
-  },cols.reduce((lasts,col) => (lasts[col.x]={x:col.x,y:0,n:col.x+'.top'},lasts),{}))
+  },cols.reduce((lasts,col) => (lasts[col.x]={x:col.x,y:-g.graph().nheight/2-r.graph().nodesep,n:col.x+'.top'},lasts),{}))
 
   // Need to sort again cause the mid nodes are all at the back
   // TODO: splice in the nodes where they fit in as it is going along
@@ -257,10 +253,10 @@ function addBridges(nodes,r){
 }
 
 function addRouting(g){
-  function addNode(x,y,side){
-    var n = Math.round(x)+','+Math.round(y)+(side?'.'+side:'')
+  function addNode(x,y,isExit){
+    var n = Math.round(x)+','+Math.round(y)+(isExit?'.exit':'')
     if(r.node(n)!==undefined) return n;
-    r.setNode(n,{x:x,y:y,type:side?'side':'route',paths:{},side:side})
+    r.setNode(n,{x:x,y:y,type:isExit?'exit':'route',paths:{}})
     return n
   }
   function addEdge(p1,p2){
@@ -277,7 +273,7 @@ function addRouting(g){
     r.node(rnode).name = n
     r.node(rnode).type = g.node(n).type
     g.node(n).enter = rnode
-    var exit = r.node(rnode).exit = g.node(n).exit = addNode(g.node(n).x,g.node(n).y,'exit')
+    var exit = r.node(rnode).exit = g.node(n).exit = addNode(g.node(n).x,g.node(n).y,true)
     r.node(exit).name = n
   })
   window.r = r
@@ -293,7 +289,7 @@ function addRouting(g){
   r.graph().grid.forEach((col,ci) => {
     if(col.type=='course' && memory.length){
       /* Node connections */
-      nodes.filter(node => !node.side && node.x >= r.graph().grid[ci-memory.length-1].x && node.x <= col.x).forEach((node,ni) => {
+      nodes.filter(node => !node.type != 'exit' && node.x >= r.graph().grid[ci-memory.length-1].x && node.x <= col.x).forEach((node,ni) => {
         // var back = r.graph().grid[ci-memory.length-1].x == node.x ? node.n : null
         var back = r.graph().grid[ci-memory.length-1].x == node.x ? (node.type=='bridge'?node.n:node.exit) : null
         // var front = node.n
@@ -310,9 +306,11 @@ function addRouting(g){
           addEdge(node.exit||node.n,memory[mi])
           if(r.node(memory[mi]).name) break;
         }
-        for(let mi = getmi(node.x)-1; mi >= 0 && !r.node(memory[mi]).name; mi--){
-          // connect to front
-          addEdge(memory[mi],node.n)
+        if(node.type != 'exit'){
+          for(let mi = getmi(node.x)-1; mi >= 0 && !r.node(memory[mi]).name; mi--){
+            // connect to front
+            addEdge(memory[mi],node.n)
+          }
         }
       })
       memory = []
@@ -339,12 +337,19 @@ function findPaths(g,r){
   g.edges().forEach(e => {
     name = g.edge(e).name = e.v+'.'+g.edge(e).type
     g.edge(e).path = PathFinder.find(g.node(e.w).enter,g.node(e.v).exit).map(n => n.id)
-    g.edge(e).path.forEach(n => {
+    g.edge(e).path.forEach((n,i) => {
       if(!r.node(n).paths[name]){
+        // Remember all of the paths (each having multiple edges) that pass through this route node, 
+        // assigning them the same coordinates as the route node as defaults, (will be changed in the next step)
         r.node(n).paths[name] = {
           x:r.node(n).x,
           y:r.node(n).y,
+          edges:[{e:e,prev:g.edge(e).path[i-1],next:g.edge(e).path[i+1]}],
         }
+      } else {
+        // keep in mind that this route doesn't get all the edges 
+        // that use the path, only the ones that go through it
+        r.node(n).paths[name].edges.push({e:e,prev:g.edge(e).path[i-1],next:g.edge(e).path[i+1]})
       }
     })
   })
@@ -352,21 +357,14 @@ function findPaths(g,r){
   r.nodes().filter(n => r.node(n).type != 'course' && Object.keys(r.node(n).paths).length==0).forEach(n => r.removeNode(n))
 }
 
-function adjustColSpacing(g,r){
-  var cols = r.nodes().reduce((cols,n) => {
-    var col = cols[r.node(n).x] = cols[r.node(n).x] || {type:r.node(n).type,nodes:[],paths:{},numLayer:0}
-    col.nodes.push(n)
-    Object.keys(r.node(n).paths).forEach(name => {
-      var path = col.paths[name] = col.paths[name] || {min:g.graph().height,max:0}
-      path.min = Math.min(path.min,r.node(n).y)
-      path.max = Math.max(path.max,r.node(n).y)
-      path.span = path.max-path.min
-    })
-    return cols
-  },{})
-  window.cols = cols
-  Object.values(cols).filter(col => col.type!='course').forEach(col => {
-    Object.values(col.paths).sort((a,b) => a.span-b.span).reduce((slots,path) => {
+function assignLanes(g,r){
+  function mash(segments,n,m){
+    !segments[n].nodes.includes(m) && segments[n].nodes.push(m)
+    segments[m] = segments[n]
+  }
+  function calculateLanes(paths){
+    var numLayer = 0
+    var slots = paths.reduce((slots,path) => {
       var j = 0
       // while there are collisions, move to the next layer
       while(slots[j].some(existing => existing.min < path.max && existing.max > path.min)){
@@ -375,10 +373,80 @@ function adjustColSpacing(g,r){
       }
       slots[j].push(path)
       path.layer = j
-      col.numLayer = Math.max(col.numLayer,path.layer+1)
+      numLayer = Math.max(numLayer,path.layer+1)
       return slots
     },[[]])
+    // slots.forEach(slot => slot.forEach(path => path.numLayer = slot.length))
+    return numLayer
+  }
+
+  var grid = r.nodes().reduce((grid,n) => {
+    var col = grid.cols[r.node(n).x] = grid.cols[r.node(n).x] || {type:r.node(n).type,nodes:[],paths:{},numLayer:0}
+    var row = grid.rows[r.node(n).y] = grid.rows[r.node(n).y] || {segments:{}}
+    col.nodes.push(n)
+    // For each path that goes through this route node
+    Object.keys(r.node(n).paths).forEach(name => {
+      // vertical paths
+      var vertpath = col.paths[name] = col.paths[name] || {min:r.node(n).y,max:r.node(n).y,nodes:[]}
+      vertpath.min = Math.min(vertpath.min,r.node(n).y)
+      vertpath.max = Math.max(vertpath.max,r.node(n).y)
+      vertpath.span = vertpath.max-vertpath.min
+      vertpath.nodes.push(n)
+
+      // horizontal paths
+      // Create all the segments
+      var segments = row.segments
+      segments[n] = segments[n] || {paths:{},nodes:[n]}
+      segments[n].paths[name] = segments[n].paths[name] || {}
+      r.node(n).paths[name].edges.forEach(edge => {
+        [edge.prev,edge.next].filter(n => n).forEach(near => {
+          if(segments[near] && segments[n] != segments[near]){
+            segments[near].nodes.forEach(m => mash(segments,n,m))
+          } else {
+            mash(segments,n,near)
+          }
+        })
+      })
+    })
+    return grid
+  },{cols:{},rows:{}})
+  window.grid = grid
+  // Assign each vertical path a lane
+  Object.values(grid.cols).forEach(col => {
+    var paths = Object.values(col.paths).sort((a,b) => b.span-a.span)
+    col.numLayer = calculateLanes(paths)
   })
+
+  // Assign each horizontal path a lane
+  Object.entries(grid.rows).forEach(([y,row]) => {
+    Object.values(row.segments).filter((n,i,a) => i==a.indexOf(n)).forEach(segment => {
+      Object.entries(segment.paths).forEach(([name,path]) => {
+        path.nodes = segment.nodes.filter(n => r.node(n).paths[name])
+        path.max = Math.max(...path.nodes.map(n => r.node(n).x))
+        path.min = Math.min(...path.nodes.map(n => r.node(n).x))
+        path.pull = path.nodes.reduce((sum,n) => {
+          var col = grid.cols[r.node(n).x]
+          var side = +(r.node(n).x==path.min)*-1 + (r.node(n).x==path.max)*1
+          // Im sorry, this line is going to take a couple paragraphs to explain
+          return ((col.numLayer-1)*(side==-1) + col.paths[name].layer*side)*dir(r.node(n).y-y)
+        },0)
+        if(path.max == path.min){
+          delete segment.paths[name]
+        }
+      })
+      var paths = Object.values(segment.paths).sort((a,b) => a.pull-b.pull)
+      segment.numLayer = calculateLanes(paths)
+      Object.entries(segment.paths).forEach(([name,path]) => {
+        path.nodes.filter(n => r.node(n).y == y).forEach(n => {
+          r.node(n).paths[name].y += g.graph().lanesep * (path.layer-(segment.numLayer-1)/2)
+        })
+      })
+    })
+  })
+  return grid.cols
+}
+
+function adjustColSpacing(g,r,cols){
   var x = g.graph().marginx || 0
   Object.entries(cols).sort((a,b) => a[0]-b[0]).map(n => n[1]).forEach((col,ci,arr) => {
     if(col.type=='course'){
@@ -408,13 +476,35 @@ function adjustColSpacing(g,r){
         }
         // Each of the lanes on the logic column
         Object.keys(r.node(n).paths).forEach(name => {
-          r.node(n).paths[name].x = x - (g.graph().lanesep * (col.paths[name].layer+1))
+          r.node(n).paths[name].x = x - (g.graph().lanesep * (col.paths[name].layer+1)*(r.node(n).type != 'exit'))
         })
       })
       x += g.graph().layersep
     }
   })
   g.graph().width = x
+}
+
+function finishLogicConnections(g,r,cols){
+  g.nodes().filter(n => g.node(n).op == 'AND').forEach(n => {
+    g.inEdges(n).map(e => {
+      var route = g.node(n).enter
+      var path = r.node(route).paths[g.edge(e).name]
+      // their lane distance multiplied by the direction they are coming from
+      var weight = path.x * dir(r.node(path.edges[0].prev).y - r.node(route).y)
+      // in case there are multiple coming directly on, keep the same place they aready have
+      weight += (path.y-r.node(route).y)/2
+      // don't care about all the edges cause they should all have the same prev
+      return {e,route,path,weight}
+    }).sort((a,b) => a.weight-b.weight).forEach(({e,path,route},i,a) => {
+      path.y =  r.node(route).y + g.graph().lanesep * (i-(a.length-1)/2)
+      path.edges.forEach(edge => {
+        if(r.node(edge.prev).y == r.node(route).y){
+          r.node(edge.prev).paths[g.edge(e).name].y = path.y
+        }
+      })
+    })
+  })
 }
 
 function layout(g){
@@ -427,6 +517,8 @@ function layout(g){
   adjustLogics(g)
   const r = addRouting(g)
   findPaths(g,r)
-  adjustColSpacing(g,r)
+  const cols = assignLanes(g,r)
+  adjustColSpacing(g,r,cols)
+  finishLogicConnections(g,r)
   return r
 }
