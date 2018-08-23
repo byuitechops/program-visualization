@@ -15,7 +15,7 @@ const g = dagre.graphlib.json.read(reqTree)
     nwidth:100,
     nheight:20,
     layersep:5,
-    lanesep:4,
+    lanesep:3,
   })
 
 // Some Graph Adjustments, mostly temporary
@@ -95,6 +95,7 @@ function render(g){
       return g.edge(e).path.map(n => r.node(n).paths[g.edge(e).name]).map(({x,y},i) => (lasty=y,(i?'L':'M')+x+','+y)).join(' ')
       +'L'+g.node(e.w).x+','+lasty
     })
+    .attr('stroke-width',e => (g.edge(e).numLines*2-1)*1.5)
     .attr('x1',e => g.edge(e).x || g.node(e.v).x)
     .attr('y1',e => g.node(e.v).y)
     .attr('x2',e => g.edge(e).x || g.node(e.w).x-(g.node(e.w).width||0))

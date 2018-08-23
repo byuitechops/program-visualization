@@ -1,3 +1,11 @@
+function setEdgeThickness(g){
+  g.nodes().forEach(n => {
+    // g.node(n).op=="AND" && (g.node(n).op="OR")
+    var numLines = g.node(n).op=="AND" ? g.predecessors(n).length : 1
+    g.outEdges(n).forEach(e => g.edge(e).numLines = numLines)
+  })
+}
+
 function group(name,children,grouptype){
   var checked = []
   function top(n){
@@ -497,7 +505,7 @@ function finishLogicConnections(g,r,cols){
       // don't care about all the edges cause they should all have the same prev
       return {e,route,path,weight}
     }).sort((a,b) => a.weight-b.weight).forEach(({e,path,route},i,a) => {
-      path.y =  r.node(route).y + g.graph().lanesep * (i-(a.length-1)/2)
+      path.y = r.node(route).y + g.graph().lanesep * (i-(a.length-1)/2)
       path.edges.forEach(edge => {
         if(r.node(edge.prev).y == r.node(route).y){
           r.node(edge.prev).paths[g.edge(e).name].y = path.y
@@ -508,6 +516,7 @@ function finishLogicConnections(g,r,cols){
 }
 
 function layout(g){
+  setEdgeThickness(g)
   createGroups(g)
   rundagre(g)
   orderGroupChildren(g)
