@@ -1,11 +1,3 @@
-function setEdgeThickness(g){
-  g.nodes().forEach(n => {
-    // g.node(n).op=="AND" && (g.node(n).op="OR")
-    var numLines = g.node(n).op=="AND" ? g.predecessors(n).length : 1
-    g.outEdges(n).forEach(e => g.edge(e).numLines = numLines)
-  })
-}
-
 function group(name,children,grouptype){
   var checked = []
   function top(n){
@@ -345,6 +337,31 @@ function findPaths(g,r){
   g.edges().forEach(e => {
     name = g.edge(e).name = e.v+'.'+g.edge(e).type
     g.edge(e).path = PathFinder.find(g.node(e.w).enter,g.node(e.v).exit).map(n => n.id)
+  })
+  // If this edge goes to an AND node, then append all of it's path data to it's parents
+  // Going backwards to that multiple ANDs in a row get the whole path
+  g.graph().grid.filter(col => col.type=='logic').reverse().forEach(col => {
+    col.nodes.filter(n => g.node(n).op == 'AND').forEach(n => {
+      // Basically I'm going to completely remove this node, 
+      // duplicating all of it's in edges for each of it's out edges
+      // like what we did when we took them out of the clone for dagre
+      g.inEdges(n).forEach(in_e => {
+        g.outEdges(n).forEach(out_e => {
+          var edge = Object.assign({},g.edge(in_e))
+          // Make a copy, cause pointers
+          edge.path = g.edge(in_e).path.slice()
+          edge.path.push(...g.edge(out_e).path)
+          // console.log(in_e.v,out_e.w,edge.path)
+          g.setEdge(in_e.v,out_e.w,edge)
+        })
+      })
+      g.nodeEdges(n).forEach(e => g.removeEdge(e))
+    })
+  })
+
+  // Copy the path data to the route nodes so that they can figure out lanes and such
+  g.edges().forEach(e => {
+    name = g.edge(e).name
     g.edge(e).path.forEach((n,i) => {
       if(!r.node(n).paths[name]){
         // Remember all of the paths (each having multiple edges) that pass through this route node, 
@@ -361,8 +378,9 @@ function findPaths(g,r){
       }
     })
   })
+
   // Clean out everything that didn't get used
-  r.nodes().filter(n => r.node(n).type != 'course' && Object.keys(r.node(n).paths).length==0).forEach(n => r.removeNode(n))
+  // r.nodes().filter(n => r.node(n).type != 'course' && Object.keys(r.node(n).paths).length==0).forEach(n => r.removeNode(n))
 }
 
 function assignLanes(g,r){
@@ -493,30 +511,7 @@ function adjustColSpacing(g,r,cols){
   g.graph().width = x
 }
 
-function finishLogicConnections(g,r,cols){
-  g.nodes().filter(n => g.node(n).op == 'AND').forEach(n => {
-    g.inEdges(n).map(e => {
-      var route = g.node(n).enter
-      var path = r.node(route).paths[g.edge(e).name]
-      // their lane distance multiplied by the direction they are coming from
-      var weight = path.x * dir(r.node(path.edges[0].prev).y - r.node(route).y)
-      // in case there are multiple coming directly on, keep the same place they aready have
-      weight += (path.y-r.node(route).y)/2
-      // don't care about all the edges cause they should all have the same prev
-      return {e,route,path,weight}
-    }).sort((a,b) => a.weight-b.weight).forEach(({e,path,route},i,a) => {
-      path.y = r.node(route).y + g.graph().lanesep * (i-(a.length-1)/2)
-      path.edges.forEach(edge => {
-        if(r.node(edge.prev).y == r.node(route).y){
-          r.node(edge.prev).paths[g.edge(e).name].y = path.y
-        }
-      })
-    })
-  })
-}
-
 function layout(g){
-  setEdgeThickness(g)
   createGroups(g)
   rundagre(g)
   orderGroupChildren(g)
@@ -528,6 +523,5 @@ function layout(g){
   findPaths(g,r)
   const cols = assignLanes(g,r)
   adjustColSpacing(g,r,cols)
-  finishLogicConnections(g,r)
   return r
 }
