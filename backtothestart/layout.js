@@ -252,6 +252,16 @@ function addBridges(nodes,r){
   nodes.sort((a,b) => a.y-b.y)
 }
 
+function removeANDs(g){
+  g.nodes().filter(n => g.node(n).op=='AND').forEach(n => {
+    g.inEdges(n).forEach(in_e => g.outEdges(n).forEach(out_e => {
+      console.log(in_e.v,out_e.w)
+      g.setEdge(in_e.v,out_e.w,Object.assign({},g.edge(in_e)))
+    }))
+    g.removeNode(n)
+  })
+}
+
 function addRouting(g){
   function addNode(x,y,isExit){
     var n = Math.round(x)+','+Math.round(y)+(isExit?'.exit':'')
@@ -337,31 +347,6 @@ function findPaths(g,r){
   g.edges().forEach(e => {
     name = g.edge(e).name = e.v+'.'+g.edge(e).type
     g.edge(e).path = PathFinder.find(g.node(e.w).enter,g.node(e.v).exit).map(n => n.id)
-  })
-  // If this edge goes to an AND node, then append all of it's path data to it's parents
-  // Going backwards to that multiple ANDs in a row get the whole path
-  g.graph().grid.filter(col => col.type=='logic').reverse().forEach(col => {
-    col.nodes.filter(n => g.node(n).op == 'AND').forEach(n => {
-      // Basically I'm going to completely remove this node, 
-      // duplicating all of it's in edges for each of it's out edges
-      // like what we did when we took them out of the clone for dagre
-      g.inEdges(n).forEach(in_e => {
-        g.outEdges(n).forEach(out_e => {
-          var edge = Object.assign({},g.edge(in_e))
-          // Make a copy, cause pointers
-          edge.path = g.edge(in_e).path.slice()
-          edge.path.push(...g.edge(out_e).path)
-          // console.log(in_e.v,out_e.w,edge.path)
-          g.setEdge(in_e.v,out_e.w,edge)
-        })
-      })
-      g.nodeEdges(n).forEach(e => g.removeEdge(e))
-    })
-  })
-
-  // Copy the path data to the route nodes so that they can figure out lanes and such
-  g.edges().forEach(e => {
-    name = g.edge(e).name
     g.edge(e).path.forEach((n,i) => {
       if(!r.node(n).paths[name]){
         // Remember all of the paths (each having multiple edges) that pass through this route node, 
@@ -380,7 +365,7 @@ function findPaths(g,r){
   })
 
   // Clean out everything that didn't get used
-  // r.nodes().filter(n => r.node(n).type != 'course' && Object.keys(r.node(n).paths).length==0).forEach(n => r.removeNode(n))
+  r.nodes().filter(n => r.node(n).type != 'course' && Object.keys(r.node(n).paths).length==0).forEach(n => r.removeNode(n))
 }
 
 function assignLanes(g,r){
@@ -519,6 +504,7 @@ function layout(g){
   positionLogicsInLevels(g)
   compileGrid(g)
   adjustLogics(g)
+  removeANDs(g)
   const r = addRouting(g)
   findPaths(g,r)
   const cols = assignLanes(g,r)
