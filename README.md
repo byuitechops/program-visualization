@@ -50,5 +50,12 @@ An attempt to visualize an entire program (degree logic, requisite logic, catalo
 - 120 credit limit
 - Equivalent Courses?
 
-## Questions
-Do concurrent requisites ever have Or's?
+#### Questions for Advising
+ - Do concurrent requisites ever have Or's?
+ - Which course is in the most amount of programs? 
+    (to know how many we should be able to display)
+
+#### Questions for Designers
+ - Should andsep be different than lanesep?
+ - Should I curve the edge corners? 
+ - Should highlighting a partial AND edge light up it's portion?
