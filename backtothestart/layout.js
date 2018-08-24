@@ -37,8 +37,10 @@ function createGroups(g){
         if(g.node(n).type == 'logic'){
           g.removeNode(n)
           return false
+        } else {
+          g.outEdges(n).filter(e => cycle.includes(e.w)).forEach(e => g.removeEdge(e))
+          return true
         }
-        return true
       })
       group(children.join(' '),children,'concurrent')
     }
@@ -185,12 +187,21 @@ function compileGrid(g){
   grid = Object.entries(grid).sort((a,b) => a[0]-b[0]).map(a => a[1])
   // Inject the extra logic layers
   for(var i = 0; i < grid.length-1; i++){
-    if(grid[i].type =='logic' && grid[i+1].type =='course'){
+    if(grid[i+1].type =='course'){
       grid.splice(i+1,0,{x:grid[i].x+g.graph().layersep,type:'logic',nodes:[]})
       i++
     }
   }
   g.graph().grid = grid
+}
+
+function removeANDs(g){
+  g.nodes().filter(n => g.node(n).op=='AND').forEach(n => {
+    g.inEdges(n).forEach(in_e => g.outEdges(n).forEach(out_e => {
+      g.setEdge(in_e.v,out_e.w,Object.assign({},g.edge(in_e)))
+    }))
+    g.removeNode(n)
+  })
 }
 
 function adjustLogics(g){
@@ -250,16 +261,6 @@ function addBridges(nodes,r){
   // Need to sort again cause the mid nodes are all at the back
   // TODO: splice in the nodes where they fit in as it is going along
   nodes.sort((a,b) => a.y-b.y)
-}
-
-function removeANDs(g){
-  g.nodes().filter(n => g.node(n).op=='AND').forEach(n => {
-    g.inEdges(n).forEach(in_e => g.outEdges(n).forEach(out_e => {
-      console.log(in_e.v,out_e.w)
-      g.setEdge(in_e.v,out_e.w,Object.assign({},g.edge(in_e)))
-    }))
-    g.removeNode(n)
-  })
 }
 
 function addRouting(g){
@@ -354,12 +355,12 @@ function findPaths(g,r){
         r.node(n).paths[name] = {
           x:r.node(n).x,
           y:r.node(n).y,
-          edges:[{e:e,prev:g.edge(e).path[i-1],next:g.edge(e).path[i+1]}],
+          edges:[{prev:g.edge(e).path[i-1],next:g.edge(e).path[i+1]}],
         }
       } else {
         // keep in mind that this route doesn't get all the edges 
         // that use the path, only the ones that go through it
-        r.node(n).paths[name].edges.push({e:e,prev:g.edge(e).path[i-1],next:g.edge(e).path[i+1]})
+        r.node(n).paths[name].edges.push({prev:g.edge(e).path[i-1],next:g.edge(e).path[i+1]})
       }
     })
   })
@@ -387,7 +388,6 @@ function assignLanes(g,r){
       numLayer = Math.max(numLayer,path.layer+1)
       return slots
     },[[]])
-    // slots.forEach(slot => slot.forEach(path => path.numLayer = slot.length))
     return numLayer
   }
 
@@ -496,6 +496,30 @@ function adjustColSpacing(g,r,cols){
   g.graph().width = x
 }
 
+function realignLogics(g,r){
+  g.nodes().filter(n => g.node(n).type == 'logic').forEach(n => {
+    var exit = g.node(n).exit
+    // Should only be one outEdge, but better safe than sorry
+    g.outEdges(n).forEach(e => {
+      var name = g.edge(e).name
+      Object.values(r.node(g.node(n).enter).paths).forEach(path => {
+        path.y = r.node(exit).paths[name].y
+      })
+      g.inEdges(n).forEach(e => {
+        var path = g.edge(e).path
+        var last = path[path.length-1]
+        Object.values(r.node(last).paths).forEach(path => path.edges.forEach(edge => edge.next = exit))
+        r.node(exit).paths[g.edge(e).name] = {
+          x:r.node(exit).paths[name].x,
+          y:r.node(exit).paths[name].y,
+          edges:[{prev:last,next:exit}]
+        }
+        path.push(exit)
+      })
+    })
+  })
+}
+
 function layout(g){
   createGroups(g)
   rundagre(g)
@@ -503,11 +527,15 @@ function layout(g){
   fixLeafNodes(g)
   positionLogicsInLevels(g)
   compileGrid(g)
-  adjustLogics(g)
+  // Hard desision where to remove the ANDs,
+  // I think here is the best to keep the extra layers, 
+  // but before the adjustLogics so that they don't have to deal with the extras
   removeANDs(g)
+  adjustLogics(g)
   const r = addRouting(g)
   findPaths(g,r)
   const cols = assignLanes(g,r)
   adjustColSpacing(g,r,cols)
+  realignLogics(g,r)
   return r
 }
