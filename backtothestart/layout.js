@@ -196,11 +196,21 @@ function compileGrid(g){
 }
 
 function removeANDs(g){
+  g.edges().forEach(e => g.edge(e).width = g.graph().andsep)
   g.nodes().filter(n => g.node(n).op=='AND').forEach(n => {
-    g.inEdges(n).forEach(in_e => g.outEdges(n).forEach(out_e => {
-      g.setEdge(in_e.v,out_e.w,Object.assign({},g.edge(in_e)))
-    }))
-    g.removeNode(n)
+    var outs = g.outEdges(n)
+    var ins = g.inEdges(n)
+    // If any of the edges go to an OR, then we don't want to delete it
+    if(!outs.some(e => g.node(e.w).op=='OR')){
+      ins.forEach(in_e => outs.forEach(out_e => {
+        g.setEdge(in_e.v,out_e.w,Object.assign({},g.edge(in_e)))
+      }))
+      g.removeNode(n)
+    } else {
+      outs.forEach(e => {
+        g.edge(e).width = (ins.length)*g.graph().andsep
+      })
+    }
   })
 }
 
@@ -208,7 +218,7 @@ function adjustLogics(g){
   var cols = g.graph().grid.filter(col => col.type == 'course')
   var nodes = g.nodes().filter(n => g.node(n).type == 'logic')
   var next = []
-  while(nodes.length){
+  // while(nodes.length){
     nodes.forEach(n => {
       var ci = cols.findIndex(col => g.node(n).x < col.x)
       var pre = g.predecessors(n).filter(n => cols[ci-1].x <= g.node(n).x)
@@ -222,12 +232,13 @@ function adjustLogics(g){
       } else if(pre.every(n => !isNaN(g.node(n).y)) && suc.every(n => !isNaN(g.node(n).y))){
         g.node(n).y = pre.concat(suc).reduce((sum,n) => sum+g.node(n).y,0)/(pre.length+suc.length)
       } else {
-        next.push(n)
+        g.node(n).y = pre.concat(suc).filter(n => !isNaN(g.node(n).y)).reduce((sum,n) => sum+g.node(n).y,0)/(pre.length+suc.length)
+        // next.push(n)
       }
     })
     nodes = next.slice()
     next = []
-  }
+  // }
 }
 
 function addBridges(nodes,r){
@@ -301,10 +312,6 @@ function addRouting(g){
     if(col.type=='course' && memory.length){
       /* Node connections */
       nodes.filter(node => !node.type != 'exit' && node.x >= r.graph().grid[ci-memory.length-1].x && node.x <= col.x).forEach((node,ni) => {
-        // var back = r.graph().grid[ci-memory.length-1].x == node.x ? node.n : null
-        var back = r.graph().grid[ci-memory.length-1].x == node.x ? (node.type=='bridge'?node.n:node.exit) : null
-        // var front = node.n
-        var front = r.graph().grid[ci-memory.length-1].x != node.x ? node.n : null
         var x = mi => r.graph().grid[ci-memory.length+mi].x
         var getmi = x => r.graph().grid.findIndex(col=>col.x==x)-(ci-memory.length)
         memory = memory.map((mem,mi) => {
@@ -355,6 +362,7 @@ function findPaths(g,r){
         r.node(n).paths[name] = {
           x:r.node(n).x,
           y:r.node(n).y,
+          width:g.edge(e).width,
           edges:[{prev:g.edge(e).path[i-1],next:g.edge(e).path[i+1]}],
         }
       } else {
@@ -374,31 +382,33 @@ function assignLanes(g,r){
     !segments[n].nodes.includes(m) && segments[n].nodes.push(m)
     segments[m] = segments[n]
   }
+  function hasCollisions(slots,offset,path){
+    return slots.some(existing => 
+      existing.min < path.max && existing.max > path.min && 
+      existing.offset < offset+path.width && existing.offset+existing.width > offset)
+  }
   function calculateLanes(paths){
-    var numLayer = 0
+    var width = 0
     var slots = paths.reduce((slots,path) => {
       var j = 0
       // while there are collisions, move to the next layer
-      while(slots[j].some(existing => existing.min < path.max && existing.max > path.min)){
-        ++j
-        slots[j] = slots[j] || []
-      }
-      slots[j].push(path)
-      path.layer = j
-      numLayer = Math.max(numLayer,path.layer+1)
+      while(hasCollisions(slots,j,path)){ j += g.graph().lanesep }
+      path.offset = j
+      slots.push(path)
+      width = Math.max(width,path.offset+path.width)
       return slots
-    },[[]])
-    return numLayer
+    },[])
+    return width
   }
 
   var grid = r.nodes().reduce((grid,n) => {
-    var col = grid.cols[r.node(n).x] = grid.cols[r.node(n).x] || {type:r.node(n).type,nodes:[],paths:{},numLayer:0}
+    var col = grid.cols[r.node(n).x] = grid.cols[r.node(n).x] || {type:r.node(n).type,nodes:[],paths:{},width:0}
     var row = grid.rows[r.node(n).y] = grid.rows[r.node(n).y] || {segments:{}}
     col.nodes.push(n)
     // For each path that goes through this route node
     Object.keys(r.node(n).paths).forEach(name => {
       // vertical paths
-      var vertpath = col.paths[name] = col.paths[name] || {min:r.node(n).y,max:r.node(n).y,nodes:[]}
+      var vertpath = col.paths[name] = col.paths[name] || {min:r.node(n).y,max:r.node(n).y,nodes:[],width:r.node(n).paths[name].width}
       vertpath.min = Math.min(vertpath.min,r.node(n).y)
       vertpath.max = Math.max(vertpath.max,r.node(n).y)
       vertpath.span = vertpath.max-vertpath.min
@@ -408,7 +418,7 @@ function assignLanes(g,r){
       // Create all the segments
       var segments = row.segments
       segments[n] = segments[n] || {paths:{},nodes:[n]}
-      segments[n].paths[name] = segments[n].paths[name] || {}
+      segments[n].paths[name] = segments[n].paths[name] || {width:r.node(n).paths[name].width}
       r.node(n).paths[name].edges.forEach(edge => {
         [edge.prev,edge.next].filter(n => n).forEach(near => {
           if(segments[near] && segments[n] != segments[near]){
@@ -422,12 +432,13 @@ function assignLanes(g,r){
     return grid
   },{cols:{},rows:{}})
   window.grid = grid
+
   // Assign each vertical path a lane
   Object.values(grid.cols).forEach(col => {
     var paths = Object.values(col.paths).sort((a,b) => b.span-a.span)
-    col.numLayer = calculateLanes(paths)
+    col.width = calculateLanes(paths)
   })
-
+  
   // Assign each horizontal path a lane
   Object.entries(grid.rows).forEach(([y,row]) => {
     Object.values(row.segments).filter((n,i,a) => i==a.indexOf(n)).forEach(segment => {
@@ -439,17 +450,18 @@ function assignLanes(g,r){
           var col = grid.cols[r.node(n).x]
           var side = +(r.node(n).x==path.min)*-1 + (r.node(n).x==path.max)*1
           // Im sorry, this line is going to take a couple paragraphs to explain
-          return ((col.numLayer-1)*(side==-1) + col.paths[name].layer*side)*dir(r.node(n).y-y)
+          return ((col.width)*(side==-1) + col.paths[name].offset*side)*dir(r.node(n).y-y)
         },0)
         if(path.max == path.min){
           delete segment.paths[name]
         }
       })
       var paths = Object.values(segment.paths).sort((a,b) => a.pull-b.pull)
-      segment.numLayer = calculateLanes(paths)
+      segment.width = calculateLanes(paths)
+      
       Object.entries(segment.paths).forEach(([name,path]) => {
         path.nodes.filter(n => r.node(n).y == y).forEach(n => {
-          r.node(n).paths[name].y += g.graph().lanesep * (path.layer-(segment.numLayer-1)/2)
+          r.node(n).paths[name].y += path.offset - segment.width/2
         })
       })
     })
@@ -479,7 +491,7 @@ function adjustColSpacing(g,r,cols){
       })
       x += g.graph().ranksep/2
     } else {
-      x += g.graph().layersep * col.numLayer
+      x += col.width
       col.nodes.forEach(n => {
         r.node(n).x = x // the logic column routes
         if(r.node(n).name){
@@ -487,7 +499,7 @@ function adjustColSpacing(g,r,cols){
         }
         // Each of the lanes on the logic column
         Object.keys(r.node(n).paths).forEach(name => {
-          r.node(n).paths[name].x = x - (g.graph().lanesep * (col.paths[name].layer+1)*(r.node(n).type != 'exit'))
+          r.node(n).paths[name].x = x - ((col.paths[name].offset+g.graph().lanesep)*(r.node(n).type != 'exit'))
         })
       })
       x += g.graph().layersep
@@ -497,45 +509,63 @@ function adjustColSpacing(g,r,cols){
 }
 
 function realignLogics(g,r){
+  function crawl(path,name,bady,correcty){
+    path.y = correcty
+    path.edges
+      .filter(edge => edge.prev && r.node(edge.prev).y == bady)
+      .forEach(edge => crawl(r.node(edge.prev).paths[name],name,bady,correcty))
+  }
+
   g.nodes().filter(n => g.node(n).type == 'logic').forEach(n => {
     var exit = g.node(n).exit
+    var enter = g.node(n).enter
     // Should only be one outEdge, but better safe than sorry
+    // for Each edge that exits this logic node
     g.outEdges(n).forEach(e => {
-      var name = g.edge(e).name
-      Object.values(r.node(g.node(n).enter).paths).forEach(path => {
-        path.y = r.node(exit).paths[name].y
+      eh = e.v == '[B301 B321 B341 B361]*'
+      var current = g.edge(e).name
+      var bady = r.node(exit).y
+      var correcty = r.node(exit).paths[current].y
+      
+      if(g.node(n).op == 'AND'){
+        Object.values(r.node(enter).paths)
+          .map(path => ({path:path,pull:path.x*dir(r.node(path.edges[0].prev).y-bady)}))
+          .sort((a,b) => a.pull-b.pull).forEach(({path},i,a) => path.offsety = path.width*(i-(a.length-1)/2))
+      }
+
+      Object.entries(r.node(enter).paths).forEach(([name,path]) => {
+        path.edges.map(edge => edge.next = exit)
+        crawl(path,name,bady,correcty+(path.offsety||0))
       })
-      g.inEdges(n).forEach(e => {
-        var path = g.edge(e).path
-        var last = path[path.length-1]
-        Object.values(r.node(last).paths).forEach(path => path.edges.forEach(edge => edge.next = exit))
-        r.node(exit).paths[g.edge(e).name] = {
-          x:r.node(exit).paths[name].x,
-          y:r.node(exit).paths[name].y,
-          edges:[{prev:last,next:exit}]
+
+      Object.entries(r.node(enter).paths).forEach(([name,path]) => {
+        r.node(exit).paths[name] = {
+          x:r.node(exit).x,
+          y:correcty+(path.offsety||0),
+          edges:[{prev:enter,next:undefined}]
         }
-        path.push(exit)
       })
+      g.inEdges(n).forEach(e => g.edge(e).path.push(exit))
     })
   })
 }
 
 function layout(g){
-  createGroups(g)
-  rundagre(g)
-  orderGroupChildren(g)
-  fixLeafNodes(g)
-  positionLogicsInLevels(g)
-  compileGrid(g)
+  createGroups.time(g)
+  rundagre.time(g)
+  orderGroupChildren.time(g)
+  fixLeafNodes.time(g)
+  positionLogicsInLevels.time(g)
+  compileGrid.time(g)
   // Hard desision where to remove the ANDs,
-  // I think here is the best to keep the extra layers, 
+  // I think here is the best after compileGried to keep the extra layers, 
   // but before the adjustLogics so that they don't have to deal with the extras
-  removeANDs(g)
-  adjustLogics(g)
-  const r = addRouting(g)
-  findPaths(g,r)
-  const cols = assignLanes(g,r)
-  adjustColSpacing(g,r,cols)
-  realignLogics(g,r)
+  removeANDs.time(g)
+  adjustLogics.time(g)
+  const r = addRouting.time(g)
+  findPaths.time(g,r)
+  const cols = assignLanes.time(g,r)
+  adjustColSpacing.time(g,r,cols)
+  realignLogics.time(g,r)
   return r
 }

@@ -92,5 +92,5 @@ const reqs = new graphlib.Graph({compound:true});
 
 console.log('nodes:',reqs.nodeCount(),'edges:',reqs.edgeCount())
 
-fs.writeFileSync('req-tree.js','var reqTree = '+JSON.stringify(graphlib.json.write(reqs)));
+fs.writeFileSync('../backtothestart/req-tree.js','var reqTree = '+JSON.stringify(graphlib.json.write(reqs)));
 // BAD: B458 B478 MUSIC158A
