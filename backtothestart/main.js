@@ -1,6 +1,7 @@
 const svg = d3.select('body').append('svg')
 const $routes = svg.append('g').classed('routes',true)
 const $edges = svg.append('g').classed('edges',true)
+const $highlight = svg.append('g').classed('highlighter',true)
 const $nodes = svg.append('g').classed('nodes',true)
 const $groups = svg.append('g').classed('groups',true)
 
@@ -16,6 +17,7 @@ const g = dagre.graphlib.json.read(reqTree)
     nheight:20,
     layersep:5,
     lanesep:3,
+    andsep:1.5,
   })
 
 // Some Graph Adjustments, mostly temporary
@@ -29,28 +31,42 @@ g.nodes().forEach(n => {
 g.removeNode('[]+')
 g.removeNode('[]*')
 
-const r = layout(g)
+const r = layout.time(g)
+
 // render(clone)
 render(g,r)
 // routesrender(g,r)
 
-function parents(n,highlight,first=true){
-  d3.select(`[data-id="${n}"]`)
-    .classed('highlight',highlight)
-  if(first || g.node(n).type!='course'){
-    d3.selectAll(`[data-target="${n}"]`)
-      .classed('highlight',highlight)
-    g.predecessors(n).forEach(n => parents(n,highlight,false))
+function predecessors(g,n,collection=[],first=true){
+  collection.push(`[data-id="${n}"]`)
+  if(first || g.node(n).type != 'course'){
+    collection.push(...g.inEdges(n).map(e => `[data-source="${e.v}"][data-target="${e.w}"]`))
+    g.predecessors(n).map(n => predecessors(g,n,collection,false))
   }
+  return collection
 }
-function children(n,highlight,first=true){
-  d3.select(`[data-id="${n}"]`)
-    .classed('highlight',highlight)
-  if(first || g.node(n).type!='course'){
-    d3.selectAll(`[data-source="${n}"]`)
-      .classed('highlight',highlight)
-    g.successors(n).forEach(n => children(n,highlight,false))
+
+function successors(g,n,collection=[],first=true){
+  collection.push(`[data-id="${n}"]`)
+  if(first || (g.node(n).type != 'course' && g.node(n).op != 'AND')){
+    collection.push(...g.outEdges(n).map(e => `[data-source="${e.v}"][data-target="${e.w}"]`))
+    g.successors(n).map(n => successors(g,n,collection,false))
   }
+  return collection
+}
+
+function highlight(n,isOn){
+  var _highlight = $highlight.selectAll('use')
+  .data(isOn ? predecessors(g,n).concat(successors(g,n)) : [])
+  _highlight.enter().append('use')
+    .merge(_highlight)
+    // .each((e,i) => console.log(document.querySelector(`[data-source="${e.v}"][data-target="${e.w}"]`)))
+    .each((sel,i) => d3.select(sel).classed('highlight',true).attr('id','use_'+i))
+    .attr('href',(e,i) => '#use_'+i)
+  _highlight.exit()
+    .each(sel => d3.select(sel).classed('highlight',false).attr('id',undefined))
+    // .attr('href',undefined)
+    .remove()
 }
 
 function render(g){
@@ -65,10 +81,10 @@ function render(g){
   // Update elements with the new calculations
   var enteringNodes = _nodes.enter().append('g')
     .attr('data-id',n => n)
-    .attr('data-type',n => g.node(n).type)
+    .attr('data-type',n => g.node(n).op || g.node(n).type)
     .classed('disabled',n => g.predecessors(n).length)
-    .on('mouseover',n => {parents(n,true);children(n,true)})
-    .on('mouseout',n => {parents(n,false);children(n,false)})
+    .on('mouseover',n => highlight(n,true))
+    .on('mouseout',n =>  highlight(n,false))
   var courseNodes = enteringNodes.filter(n => g.node(n).type=='course' || g.node(n).type=='group')
   courseNodes.append('rect')
     .attr('width',n => g.node(n).width)
@@ -95,6 +111,7 @@ function render(g){
       return g.edge(e).path.map(n => r.node(n).paths[g.edge(e).name]).map(({x,y},i) => (i?'L':'M')+x+','+y).join(' ')
       // +'L'+(g.node(e.w).x-g.node(e.w).width||0)+','+g.node(e.w).y
     })
+    // .attr('stroke-width', e => g.edge(e).width)
     .attr('x1',e => g.edge(e).x || g.node(e.v).x)
     .attr('y1',e => g.node(e.v).y)
     .attr('x2',e => g.edge(e).x || g.node(e.w).x-(g.node(e.w).width||0))
@@ -112,8 +129,6 @@ function render(g){
     .attr('y',n => g.node(n).y-g.node(n).height/2-thickness/2)
     .attr('width',n => g.node(n).width-thickness)
     .attr('height',n => g.node(n).height+thickness)
-    .on('mouseover',n => {g.children(n).forEach(n => parents(n,true),children(n,true))})
-    .on('mouseout',n => {g.children(n).forEach(n => parents(n,false),children(n,false))})
   _groups.exit().remove()
 
   svg

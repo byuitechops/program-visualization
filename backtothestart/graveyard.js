@@ -232,3 +232,13 @@ if(segments[m]){
     }
   })
 }
+
+var path = g.edge(e).path
+var last = path[path.length-1]
+Object.values(r.node(last).paths).forEach(path => path.edges.forEach(edge => edge.next = exit))
+r.node(exit).paths[g.edge(e).name] = {
+  x:r.node(exit).paths[name].x,
+  y:r.node(exit).paths[name].y,
+  edges:[{prev:last,next:exit}]
+}
+path.push(exit)
