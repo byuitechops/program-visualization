@@ -242,3 +242,24 @@ r.node(exit).paths[g.edge(e).name] = {
   edges:[{prev:last,next:exit}]
 }
 path.push(exit)
+
+
+/* 
+line.req.disabled.pre { stroke:#DDD; }
+line.req.enabled.pre { stroke: #888; }
+line.req.active.pre { stroke:black; }
+line.req.disabled.co { stroke:#B1F0F0; }
+line.req.enabled.co { stroke:#40CFC3 }
+line.req.active.co { stroke:#007876 }
+line.req.disabled.concur { stroke:#F2BEF2; }
+line.req.enabled.concur { stroke:#B551B5; }
+line.req.active.concur { stroke:#4D004D; }
+*/
+/* 
+line.req.disabled.pre { stroke:#AAA; }
+line.req.active.pre { stroke:black; }
+line.req.disabled.co { stroke:#7AE0D6; }
+line.req.active.co { stroke:#00857B }
+line.req.disabled.concur { stroke:#E5A5E0; }
+line.req.active.concur { stroke:#5E0057; }
+*/

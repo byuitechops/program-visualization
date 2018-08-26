@@ -9,7 +9,7 @@ const $groups = svg.append('g').classed('groups',true)
 const g = dagre.graphlib.json.read(reqTree)
   .setGraph({
     rankdir:'LR',
-    nodesep:5,
+    nodesep:3,
     edgesep:0,
     ranksep:20,
     marginx:50,
@@ -31,11 +31,15 @@ g.nodes().forEach(n => {
 g.removeNode('[]+')
 g.removeNode('[]*')
 
+const color = (() => {
+  var i = 0, colors = g.nodes().reduce((obj,n) => (g.node(n).program!=undefined && (obj[g.node(n).program] = obj[g.node(n).program] || i++),obj),{})
+  return n => colors[n]!=undefined ? d3.interpolateRainbow(colors[n]/i-1) : '#999'
+})()
 const r = layout.time(g)
-
 // render(clone)
 render(g,r)
 // routesrender(g,r)
+updateStates(g)
 
 function predecessors(g,n,collection=[],first=true){
   collection.push(`[data-id="${n}"]`)
@@ -60,13 +64,36 @@ function highlight(n,isOn){
   .data(isOn ? predecessors(g,n).concat(successors(g,n)) : [])
   _highlight.enter().append('use')
     .merge(_highlight)
-    // .each((e,i) => console.log(document.querySelector(`[data-source="${e.v}"][data-target="${e.w}"]`)))
     .each((sel,i) => d3.select(sel).classed('highlight',true).attr('id','use_'+i))
     .attr('href',(e,i) => '#use_'+i)
   _highlight.exit()
     .each(sel => d3.select(sel).classed('highlight',false).attr('id',undefined))
-    // .attr('href',undefined)
     .remove()
+}
+
+function updateStates(g){
+  var checked = {}
+  g.nodes().forEach(function check(n){
+    if(checked[n]) return;
+    var logic = [g.node(n).op=='OR'?'some':'every']
+    g.node(n).enabled = g.predecessors(n)[logic](n => {
+      !checked[n] && check(n)
+      return g.node(n).type=='course'?g.node(n).active:g.node(n).enabled
+    })
+    // If enabled, keep active state, or set to enabled. Otherwise disable
+    if(g.node(n).enabled){
+      if(g.node(n).type != 'course'){
+        g.node(n).active = true
+      }
+      g.node(n).state = g.node(n).active ? 'active' : 'enabled'
+    } else {
+      g.node(n).active = false
+      g.node(n).state = 'disabled'
+    }
+    var succs = g.outEdges(n).map(e => `[data-source="${e.v}"][data-target="${e.w}"]`).concat(`[data-id="${n}"]`)
+    succs.forEach(sel => d3.select(sel).attr('data-state',g.node(n).state))
+    checked[n] = true
+  })
 }
 
 function render(g){
@@ -85,14 +112,22 @@ function render(g){
     .classed('disabled',n => g.predecessors(n).length)
     .on('mouseover',n => highlight(n,true))
     .on('mouseout',n =>  highlight(n,false))
+    .on('click',n => g.node(n).enabled && (g.node(n).active = !g.node(n).active,updateStates(g,n)))
   var courseNodes = enteringNodes.filter(n => g.node(n).type=='course' || g.node(n).type=='group')
   courseNodes.append('rect')
     .attr('width',n => g.node(n).width)
     .attr('height',n => g.node(n).height)
+    .attr('fill',n => color(g.node(n).program))
   courseNodes.append('text')
     .attr('x',n => g.node(n).width/2)
     .attr('y',n => g.node(n).height/2)
     .text(n => g.node(n).type=='course'?n:'')
+  courseNodes.append('line')
+    .attr('x1',0)
+    .attr('y1',n => g.node(n).height-1.5)
+    .attr('x2',n => g.node(n).width)
+    .attr('y2',n => g.node(n).height-1.5)
+    .attr('stroke',n => color(g.node(n).program))
   enteringNodes.filter(n => g.node(n).type!='course'&&g.node(n).type!='group').append('circle')
   enteringNodes.merge(_nodes)
     .attr('transform',n => {
@@ -118,7 +153,7 @@ function render(g){
     .attr('y2',e => g.node(e.w).y)
   _edges.exit().remove()
 
-  var thickness = 2.5
+  var thickness = 1.5
   _groups.enter().append('rect')
     .attr('data-id',n => n)
     .attr('data-type',n => g.node(n).type)
@@ -160,7 +195,7 @@ function routesrender(g,r){
     .attr('height',g.graph().height)
 }
 
-
+/* Debugging for 'fixLeafNodes' */
 // svg.append('g').selectAll('rect')
 //   .data(Object.entries(spaces).reduce((arr,[x,spaces]) => arr.concat(spaces.map(n => (n.x=x,n))),[]))
 //   .enter().append('line')

@@ -548,6 +548,13 @@ function realignLogics(g,r){
       g.inEdges(n).forEach(e => g.edge(e).path.push(exit))
     })
   })
+
+  g.nodes().filter(n => g.node(n).type == 'course').forEach(n => {
+    var enter = g.node(n).enter
+    Object.values(r.node(enter).paths).forEach(path => {
+      path.x-=g.graph().nwidth
+    })
+  })
 }
 
 function layout(g){

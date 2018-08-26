@@ -11,3 +11,6 @@ Function.prototype.time = function time(){
   DEBUG && console.timeEnd(this.name)
   return returned
 }
+String.prototype.on = function(){
+  return (g.node(this).op=='OR'?'some':'every')+' '+g.predecessors(this).map(n => n+`[${+!!g.node(n).enabled}${+!!g.node(n).active}]${Boolean(g.node(n).type=='course'?g.node(n).active:g.node(n).enabled)}`).join(' , ')
+}
