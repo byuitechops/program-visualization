@@ -1,0 +1,116 @@
+<html>
+  <head>
+    <style>
+      :root {
+        --main-color:purple;
+        --second-color:orange;
+        --third-color:green;
+      }
+      text {
+        font-weight: 300;
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serf;
+        font-size: 14px;
+        text-anchor: middle;
+        dominant-baseline:middle;
+      }
+      rect {
+        fill:#F0F0F0;
+      }
+      line {
+        stroke-width:3px;
+      }
+      line.req {
+        stroke-width:1.5px;
+      }
+      line.req.disabled.pre { stroke:#DDD; }
+      line.req.enabled.pre { stroke: #888; }
+      line.req.active.pre { stroke:black; }
+      line.req.disabled.co { stroke:#B1F0F0; }
+      line.req.enabled.co { stroke:#40CFC3 }
+      line.req.active.co { stroke:#007876 }
+      line.req.disabled.concur { stroke:#F2BEF2; }
+      line.req.enabled.concur { stroke:#B551B5; }
+      line.req.active.concur { stroke:#4D004D; }
+      g line:first-of-type {
+        stroke:var(--main-color);
+      }
+      g line:nth-of-type(2) {
+        stroke:var(--second-color);
+      }
+      g line:nth-of-type(3) {
+        stroke:var(--third-color);
+      }
+      g.disabled text {
+        fill:#AAA;
+      }
+      g.disabled line {
+        stroke-opacity: 0.2;
+      }
+      g.enabled rect {
+        fill:#DDD;
+      }
+      g.enabled line {
+        stroke-opacity:0.6;
+      }
+      g.enabled:hover rect {
+        stroke:var(--main-color);
+      }
+      g.active rect {
+        fill:var(--main-color);
+        fill-opacity:0.7;
+      }
+      g.active text {
+        fill:white;
+      }
+      g:hover rect{
+        stroke-width:1.5px;
+        stroke:blue;
+      }
+    </style>
+    <script src="d3.min.js" charset="utf-8"></script>
+    <script src="dagre.min.js"></script>
+  </head>
+  <body>
+    <svg width="900" height="600">
+      <g transform="translate(100,20)" class="disabled">
+        <rect width="100" height="20"></rect>
+        <text x="50" y="10">CHEM101</text>
+        <line x1="0" y1="18.5" x2="33" y2="18.5"></line>
+        <line x1="33" y1="18.5" x2="66" y2="18.5"></line>
+        <line x1="66" y1="18.5" x2="100" y2="18.5"></line>
+      </g>
+      <line x1="50" y1="27" x2="100" y2="27" class="req disabled co"></line>
+      <line x1="50" y1="30" x2="100" y2="30" class="req disabled pre"></line>
+      <line x1="50" y1="33" x2="100" y2="33" class="req disabled concur"></line>
+      <line x1="200" y1="27" x2="250" y2="27" class="req disabled co"></line>
+      <line x1="200" y1="30" x2="250" y2="30" class="req disabled pre"></line>
+      <line x1="200" y1="33" x2="250" y2="33" class="req disabled concur"></line>
+      <g transform="translate(100,43)" class="enabled">
+        <rect width="100" height="20"></rect>
+        <text x="50" y="10">CHEM201</text>
+        <line x1="0" y1="18.5" x2="33" y2="18.5"></line>
+        <line x1="33" y1="18.5" x2="66" y2="18.5"></line>
+        <line x1="66" y1="18.5" x2="100" y2="18.5"></line>
+      </g>
+      <line x1="50" y1="50" x2="100" y2="50" class="req enabled co"></line>
+      <line x1="50" y1="53" x2="100" y2="53" class="req enabled pre"></line>
+      <line x1="50" y1="56" x2="100" y2="56" class="req enabled concur"></line>
+      <line x1="200" y1="50" x2="250" y2="50" class="req disabled co"></line>
+      <line x1="200" y1="53" x2="250" y2="53" class="req disabled pre"></line>
+      <line x1="200" y1="56" x2="250" y2="56" class="req disabled concur"></line>
+      <g transform="translate(100,66)" class="active">
+        <rect width="100" height="20"></rect>
+        <text x="50" y="10">CHEM301</text>
+        <line x1="0" y1="18.5" x2="80" y2="18.5"></line>
+        <line x1="80" y1="18.5" x2="90" y2="18.5"></line>
+        <line x1="90" y1="18.5" x2="100" y2="18.5"></line>
+      </g>
+      <line x1="50" y1="73" x2="100" y2="73" class="req active co"></line>
+      <line x1="50" y1="76" x2="100" y2="76" class="req active pre"></line>
+      <line x1="50" y1="79" x2="100" y2="79" class="req active concur"></line>
+      <line x1="200" y1="73" x2="250" y2="73" class="req enabled co"></line>
+      <line x1="200" y1="76" x2="250" y2="76" class="req enabled pre"></line>
+      <line x1="200" y1="79" x2="250" y2="79" class="req enabled concur"></line>
+    </svg>
+  </body>
+</html>
