@@ -63,11 +63,15 @@ function createGroups(g){
 }
 
 function rundagre(g){
-  function addEdge(v,w){
+  function addEdge(v,w,e){
+    var weight = (e && e.weight) || 1
+    if(!clone.node(v) || !clone.node(w)){
+      console.error('Trying to set an edge to a node that does not exist')
+    }
     if(clone.edge(v,w)==undefined){
-      clone.setEdge(v,w,{weight:1})
+      clone.setEdge(v,w,{weight})
     } else {
-      clone.edge(v,w).weight++
+      clone.edge(v,w).weight+=weight
     }
   }
   // Copy Graph cause I only want the dagre layout algorithm to run on the courses not the logics
@@ -82,13 +86,15 @@ function rundagre(g){
     clone.predecessors(n).forEach(pre => clone.successors(n).forEach(suc => clone.setEdge(pre,suc,{})))
     clone.removeNode(n)
   })
-  g.graph().groups.forEach(n => {
+  /* Remove all group children */
+  g.graph().groups.slice().reverse().forEach(n => {
     g.children(n).forEach(child => {
-      clone.inEdges(child).forEach(({v,w}) => addEdge(v,n))
-      clone.outEdges(child).forEach(({v,w}) => addEdge(n,w))
+      clone.inEdges(child).forEach((e) => addEdge(e.v,n,clone.edge(e)))
+      clone.outEdges(child).forEach((e) => addEdge(n,e.w,clone.edge(e)))
       clone.removeNode(child)
     })
   })
+
   window.clone = clone
   // layout the clone
   dagre.layout(clone)

@@ -7,15 +7,107 @@
  * Grouping same requisites will help simplifying the graph for the
  * dagre algorithm, and ensure that they are placed next to each other. 
  * 
- * Assumptions
- *  - The graph has the compound setting turned on
- *  - There is no such thing as concurrent ORs, cause I don't know
- *    how I would draw that
  *  - Need to be able to handle nested groups, as concurrent groups
  *    likely have the same requisites
+ * 
+ * Assumptions
+ *  - The graph has the compound setting turned on
+ *  - Concurrent courses create cycles in the graph
+ *  - There is no such thing as concurrent ORs, cause I don't know
+ *    how I would draw that
+ *  - All courses have only one parent (runs before ANDs get removed)
  */
- function createGroups(g){
- }
+/* Helper function to create the group */
+function groupCourses(name,children,grouptype){
+  // naming conventions just help with debugging
+  name = '{'+name+'}' 
+  var checked = []
+  /* Recursively finds the root parent of the given node, 
+  incrementing level if nested group is found */
+  function rootparent(n){
+    if(g.parent(n) && !checked.includes(g.parent(n))){
+      // checks to make sure that the entire group is a sub group
+      if(!g.children(g.parent(n)).every(child => children.includes(child))){
+        throw new Error('Trying to create super group which does not contain all children')
+      } else {
+        g.node(g.parent(n)).level++
+        checked.push(g.parent(n))
+      }
+    }
+    return g.parent(n) ? rootparent(g.parent(n)) : n
+  }
+  /* Create the parent node */
+  g.setNode(name,{
+    type:'group',
+    grouptype:grouptype,
+    width:g.graph().nwidth,
+    // Adding up the heights instead of numchildren*nheight, cause nested groups have abnormal heights
+    // Same Parent groups need to account for nodesep, 
+    // concurrent groups don't have nodesep
+    height: children.reduce((sum,n) => sum+g.node(n).height,0) + 
+      (children.length-1)*g.graph().nodesep*(grouptype=='same parent'),
+    coursechildren:children,
+    // level is incremented in the rootparent function, if nested groups are found
+    level:0
+  })
+  /* Add all the root parents of the children as children to the created parent node */
+  children
+    .map(child => rootparent(child))
+    .forEach(child => g.setParent(child,name))
+}
+/* Find all the groups and send them to `groupCourses` */
+function createGroups(g){
+  /* Concurrent Groups */
+  dagre.graphlib.alg.findCycles(g).forEach(cycle => {
+    // Cycle is considered a concurrent group if every 
+    // internal connection is of type 'concur'
+    var isConcurrentGroup = cycle.every(n => {
+      return g.nodeEdges(n)
+        .filter(e => cycle.includes(e.v) && cycle.includes(e.w))
+        .every(e => g.edge(e).type == 'concur')
+    })
+
+    if(isConcurrentGroup){
+      // remove the excess nodes and edges
+      var children = cycle.filter(n => {
+        if(g.node(n).type == 'logic'){
+          g.removeNode(n)
+          return false
+        } else {
+          g.outEdges(n)
+            .filter(e => cycle.includes(e.w))
+            .forEach(e => g.removeEdge(e))
+          return true
+        }
+      })
+      groupCourses(children.join(' '),children,'concurrent')
+    }
+  })
+  /* Same Parent Groups */
+  var parents = g.nodes()
+    .filter(n => g.node(n).type == 'course')
+    .reduce((parents,n) => {
+      var parent = g.predecessors(n)
+      if(parent.length==1){
+        parents[parent[0]] = parents[parent[0]] || []
+        parents[parent[0]].push(n)
+      }
+      return parents
+    },{})
+  Object.entries(parents).forEach(([n,children]) => {
+    // don't create groups with only one child,
+    if(children.length > 1){
+      groupCourses(n,children,'same parent')
+    }
+  })
+
+  /* Create g.graph().groups */
+  // Cache a list of groups created, sorted from lowest level to highest
+  // just to that I don't have to do this expensive operation multiple times
+  g.graph().groups = g.nodes()
+    .filter(n => g.node(n).type=='group')
+    .sort((a,b) => g.node(a).level-g.node(b).level)
+}
 
  /**
  * Run Dagre
@@ -28,9 +120,79 @@
  *  parent groups
  * 
  * Assumptions
- *  - g.graph().groups exists and is sorted from smallest level to largest
+ *  - g.graph().groups exists
  */
 function rundagre(g){
+  /* Helper function to add edges with the correct weight */
+  function addEdge(v,w,e){
+    var weight = (clone.edge(e) && clone.edge(e).weight) || 1
+    if(!clone.node(v) || !clone.node(w)){
+      console.error('Trying to set an edge to a node that does not exist')
+    }
+    if(clone.edge(v,w)==undefined){
+      clone.setEdge(v,w,{weight})
+    } else {
+      clone.edge(v,w).weight+=weight
+    }
+  }
+  /* Create a clone of the graph */
+  var clone = new dagre.graphlib.Graph()
+  clone.setGraph(g.graph())
+  g.nodes().forEach(n => clone.setNode(n,g.node(n)))
+  g.edges().forEach(({v,w}) => clone.setEdge(v,w,g.edge(v,w)))
+  /* Remove all logic nodes */
+  g.nodes().filter(n => g.node(n).type=='logic').forEach(n => {
+    // Replace their edges to go directly from their parents to their children
+    var edges = clone.nodeEdges(n)
+    clone.predecessors(n).forEach(pre => {
+      clone.successors(n).forEach(suc => {
+        clone.setEdge(pre,suc,{})
+      })
+    })
+    clone.removeNode(n)
+  })
+  /* Remove all group children */
+  // from lowest to highest so that the root level collects all the connections
+  g.graph().groups.slice()
+    .sort((a,b) => g.node(b).level-g.node(a).level)
+    .forEach(n => {
+      g.children(n).forEach(child => {
+        clone.inEdges(child).forEach(e => addEdge(e.v,n,e))
+        clone.outEdges(child).forEach(e => addEdge(n,e.w,e))
+        clone.removeNode(child)
+      })
+    })
+    
+  // Send the clone to dagre
+  dagre.layout(clone)
+  window.clone = clone // Just for debugging, please remove
+
+  // Temporarily assign the group children the same coordinates as their parents
+  g.graph().groups.forEach(parent => {
+    g.children(parent).forEach(child => {
+      g.node(child).x = g.node(parent).x
+      g.node(child).y = g.node(parent).y
+    })
+  })
+}
+
+ /**
+ * Create Grid
+ * -------------
+ * Creating a grid for convience. Only has the courses, for now. Will add logics
+ * later.
+ */
+function createGrid(g){
+  g.graph().columns = g.nodes()
+    .filter(n => g.node(n).type!='logic')
+    .reduce((cols,n) => {
+      cols[g.node(n).x] = cols[g.node(n).x] || {x:g.node(n).x,type:g.node(n).type,nodes:[]}
+      cols[g.node(n).x].nodes.push(n)
+      return cols
+    },{})
+  g.graph().grid = Object.entries(g.graph().columns)
+    .sort((a,b) => a[0] - b[0])
+    .map((a,i) => (a[1].ci=i,a[1]))
 }
 
  /**
@@ -41,6 +203,22 @@ function rundagre(g){
  * between their successors
  */
 function orderGroupChildren(g){
+  g.graph().groups.forEach(parent => {
+    g.children(parent).map(n => {
+      // Sum up the total distance this nodes children are away from it
+      var i = findCourses(g,n,'successors').reduce((sum,n) => sum+(g.node(n).y-g.node(parent).y),0)
+      return {n,i}
+    })
+    // order them based on which way they want to be pulled
+    .sort((a,b) => a.i-b.i)
+    .reduce((y,{n}) => {
+      // Assign each nodes y coordinate
+      g.node(n).y = y+g.node(n).height/2
+      return y + g.node(n).height + 
+      // Only include the nodesep if grouptype is not same parent
+        g.graph().nodesep*(g.node(parent).grouptype=='same parent')
+    },g.node(parent).y-g.node(parent).height/2)
+  })
 }
 
  /**
@@ -53,7 +231,65 @@ function orderGroupChildren(g){
  * of all it's predesssors weighted by their distance to the leaf node. 
  */
 function fixLeafNodes(g){
-
+  // how much space is required to fit a node
+  const spaceheight = g.graph().nheight+g.graph().nodesep*2
+  // replace the space with two spaces, surrounding this node
+  function split(space,i,node){
+    return space.splice(i,1,
+      [space[i][0],node.y-(node.height/2)],
+      [node.y+(node.height/2),space[i][1]])
+  }
+  /* Get all the leafs */
+  // are not part of a group, have no successors, and only one parent
+  var leafs = g.sinks().filter(n => 
+      !g.parent(n) && 
+      g.node(n).type == 'course' && 
+      g.predecessors(n).length == 1)
+  
+  /* Find all the spaces in each column */
+  var columnSpaces = window.columnSpaces = g.graph().grid.map(col => {
+    var spaces = [[0,g.graph().height]]
+    col.nodes
+      .filter(n => !g.parent(n) && !leafs.includes(n))
+      .forEach(n => {
+        var i = spaces.findIndex(([from,to]) => {
+          return from < g.node(n).y && g.node(n).y < to
+        })
+        if(i != -1){
+          split(spaces,i,g.node(n))
+        }
+      })
+    return spaces
+  })
+  /* Insert the leafs into the spaces */
+  // TODO: find some importance to sort the leafs by
+  leafs.forEach(n => {
+    var node = g.node(n),
+      parents = findCourses(g,n,'predecessors'),
+      mean = weightedMean(g,n,parents),
+      spaces = columnSpaces[g.graph().columns[node.x].ci]
+      closesti=null,closestdist=null
+    /* Find the closest space that has room */
+    spaces.forEach(([from,to],i) => {
+      if(to-from > spaceheight){ /* has room */
+        var dist = Math.min(Math.abs(from-mean),Math.abs(to-mean))
+        if(closesti==null || dist < closestdist){ /* is closer */
+          closesti = i
+          closestdist = dist
+        }
+      }
+    })
+    /* Insert into the space */
+    // guarenteed to be a space, because if anything it will
+    // go back to it's original spot from which it was removed
+    var closest = spaces[closesti]
+    // adjust the mean to be within the space 
+    // (but on the side where it came from)
+    mean = Math.max(mean,closest[0]+spaceheight/2)
+    mean = Math.min(mean,closest[1]-spaceheight/2)
+    node.y = mean
+    split(spaces,closesti,node)
+  })
 }
 
  /**
@@ -175,6 +411,7 @@ function fixLogicPathAlignment(g,r){
 function layout(g){
   createGroups.time(g)
   rundagre.time(g)
+  createGrid.time(g)
   orderGroupChildren.time(g)
   fixLeafNodes.time(g)
   positionLogicsInLevels.time(g)

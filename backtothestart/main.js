@@ -36,6 +36,7 @@ const color = (() => {
   return n => colors[n]!=undefined ? d3.interpolateRainbow(colors[n]/i-1) : '#999'
 })()
 const r = layout.time(g)
+const useTemporaryLines = true
 // render(clone)
 render(g,r)
 // routesrender(g,r)
@@ -80,18 +81,19 @@ function updateStates(g){
       !checked[n] && check(n)
       return g.node(n).type=='course'?g.node(n).active:g.node(n).enabled
     })
+    var state
     // If enabled, keep active state, or set to enabled. Otherwise disable
     if(g.node(n).enabled){
       if(g.node(n).type != 'course'){
         g.node(n).active = true
       }
-      g.node(n).state = g.node(n).active ? 'active' : 'enabled'
+      state = g.node(n).active ? 'active' : 'enabled'
     } else {
       g.node(n).active = false
-      g.node(n).state = 'disabled'
+      state = 'disabled'
     }
     var succs = g.outEdges(n).map(e => `[data-source="${e.v}"][data-target="${e.w}"]`).concat(`[data-id="${n}"]`)
-    succs.forEach(sel => d3.select(sel).attr('data-state',g.node(n).state))
+    succs.forEach(sel => d3.select(sel).attr('data-state',state))
     checked[n] = true
   })
 }
@@ -103,13 +105,12 @@ function render(g){
   var _edges = $edges.selectAll('path')
     .data(g.edges(),function(d){ return d ? d.v+'-'+d.w : this.getAttribute('data-source')+'-'+this.getAttribute('data-target') })
   var _groups = $groups.selectAll('rect')
-    .data(g.graph().groups,function(d){ return d ? d : this.getAttribute('data-id') })
-    
+    .data(g.graph().groups.filter(n => g.node(n)),function(d){ return d ? d : this.getAttribute('data-id') })
+
   // Update elements with the new calculations
   var enteringNodes = _nodes.enter().append('g')
     .attr('data-id',n => n)
     .attr('data-type',n => g.node(n).op || g.node(n).type)
-    .classed('disabled',n => g.predecessors(n).length)
     .on('mouseover',n => highlight(n,true))
     .on('mouseout',n =>  highlight(n,false))
     .on('click',n => g.node(n).enabled && (g.node(n).active = !g.node(n).active,updateStates(g,n)))
@@ -136,21 +137,25 @@ function render(g){
     })
   _nodes.exit().remove()
 
-  _edges.enter().append('path')
+  var entering = _edges.enter().append(useTemporaryLines ? 'line' : 'path')
     .attr('data-source',e => g.edge(e).v || e.v)
     .attr('data-target',e => g.edge(e).w || e.w)
     .attr('data-type',e => g.edge(e).type)
-  .merge(_edges)
-    .attr('d',e => {
-      // console.log(g.edge(e).path,g.edge(e).name)
-      return g.edge(e).path.map(n => r.node(n).paths[g.edge(e).name]).map(({x,y},i) => (i?'L':'M')+x+','+y).join(' ')
-      // +'L'+(g.node(e.w).x-g.node(e.w).width||0)+','+g.node(e.w).y
-    })
-    // .attr('stroke-width', e => g.edge(e).width)
-    .attr('x1',e => g.edge(e).x || g.node(e.v).x)
-    .attr('y1',e => g.node(e.v).y)
-    .attr('x2',e => g.edge(e).x || g.node(e.w).x-(g.node(e.w).width||0))
-    .attr('y2',e => g.node(e.w).y)
+  if(useTemporaryLines){ // For debugging
+    entering.merge(_edges)
+      .attr('x1',e => g.edge(e).x || g.node(e.v).x)
+      .attr('y1',e => g.node(e.v).y)
+      .attr('x2',e => g.edge(e).x || g.node(e.w).x-(g.node(e.w).width||0) || 0)
+      .attr('y2',e => g.node(e.w).y)
+  } else {
+    entering.merge(_edges)
+      .attr('d',e => {
+        // console.log(g.edge(e).path,g.edge(e).name)
+        return g.edge(e).path.map(n => r.node(n).paths[g.edge(e).name]).map(({x,y},i) => (i?'L':'M')+x+','+y).join(' ')
+        // +'L'+(g.node(e.w).x-g.node(e.w).width||0)+','+g.node(e.w).y
+      })
+      // .attr('stroke-width', e => g.edge(e).width)
+  }
   _edges.exit().remove()
 
   var thickness = 1.5
@@ -196,12 +201,12 @@ function routesrender(g,r){
 }
 
 /* Debugging for 'fixLeafNodes' */
-// svg.append('g').selectAll('rect')
-//   .data(Object.entries(spaces).reduce((arr,[x,spaces]) => arr.concat(spaces.map(n => (n.x=x,n))),[]))
-//   .enter().append('line')
-//   .attr('x1',d => d.x)
-//   .attr('x2',d => d.x)
-//   .attr('y1',d => d[0])
-//   .attr('y2',d => d[1])
-//   .attr('stroke','maroon')
-//   .attr('stroke-width',10)
+svg.append('g').selectAll('rect')
+  .data(columnSpaces.reduce((arr,spaces,i) => arr.concat(spaces.map(n => (n.x=g.graph().grid[i].x,n))),[]))
+  .enter().append('line')
+  .attr('x1',d => d.x)
+  .attr('x2',d => d.x)
+  .attr('y1',d => d[0])
+  .attr('y2',d => d[1])
+  .attr('stroke','maroon')
+  .attr('stroke-width',10)
