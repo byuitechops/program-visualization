@@ -248,16 +248,26 @@ function orderGroupChildren(g){
  * seem like the easiest ones to place. So we record all the empty spots 
  * that a node could fit in (plus the space taken by leaf nodes we are moving)
  * Then for each node, move it to the spot closest to the mean y coordinate 
- * of all it's predesssors weighted by their distance to the leaf node. 
+ * of all it's predesssors weighted by their distance to the leaf node. We
+ * then have to handle collisions with other leaf nodes we are moving.
  */
 function fixLeafNodes(g){
   // how much space is required to fit a node
   const spaceheight = g.graph().nheight+g.graph().nodesep*2
+  // how much room a space has (range - num of nodes * nodespace)
+  const room = s => s.to-s.from-(s.nodes.length*g.graph().nheight+(s.nodes.length-1)*g.graph().nodesep*2)
+  const walls = (y,height,space) => Math.min(Math.max(y,space.from+height/2),space.to-height/2)
   // replace the space with two spaces, surrounding this node
   function split(space,i,node){
-    return space.splice(i,1,
-      [space[i][0],node.y-(node.height/2)],
-      [node.y+(node.height/2),space[i][1]])
+    return space.splice(i,1,{
+      from:space[i].from,
+      to:node.y-(node.height/2),
+      nodes:[]
+    },{
+      from:node.y+(node.height/2),
+      to:space[i].to,
+      nodes:[]
+    })
   }
   /* Get all the leafs */
   // are not part of a group, and have only one neighbor
@@ -269,12 +279,12 @@ function fixLeafNodes(g){
   /* Find all the spaces in each column */
   var columnSpaces = window.columnSpaces = {}
   for(var col = g.graph().root; col; col = col.next){
-    var spaces = [[0,g.graph().height]]
+    var spaces = [{from:0,to:g.graph().height,nodes:[]}]
     col.nodes
       .filter(n => !g.parent(n) && !leafs.includes(n))
       .forEach(n => {
-        var i = spaces.findIndex(([from,to]) => {
-          return from < g.node(n).y && g.node(n).y < to
+        var i = spaces.findIndex(space => {
+          return space.from < g.node(n).y && g.node(n).y < space.to
         })
         if(i != -1){
           split(spaces,i,g.node(n))
@@ -284,7 +294,6 @@ function fixLeafNodes(g){
   }
 
   /* Insert the leafs into the spaces */
-  // TODO: find some importance to sort the leafs by
   leafs.forEach(n => {
     var node = g.node(n),
       parents = findCourses(g,n,g.predecessors(n).length?'predecessors':'successors'),
@@ -293,9 +302,9 @@ function fixLeafNodes(g){
       closesti=null,closestdist=null
 
     /* Find the closest space that has room */
-    spaces.forEach(([from,to],i) => {
-      if(to-from > spaceheight){ /* has room */
-        var dist = Math.min(Math.abs(from-mean),Math.abs(to-mean))
+    spaces.forEach((space,i) => {
+      if(room(space) > spaceheight){ /* has room */
+        var dist = Math.min(Math.abs(space.from-mean),Math.abs(space.to-mean))
         if(closesti==null || dist < closestdist){ /* is closer */
           closesti = i
           closestdist = dist
@@ -305,21 +314,61 @@ function fixLeafNodes(g){
     /* Insert into the space */
     // guarenteed to be a space, because if anything it will
     // go back to it's original spot from which it was removed
+    if(closesti == null){ throw new Error('Apparently we are playing musical chairs!') }
     var closest = spaces[closesti]
-    // adjust the mean to be within the space 
-    // (but on the side where it came from)
-    mean = Math.max(mean,closest[0]+spaceheight/2)
-    mean = Math.min(mean,closest[1]-spaceheight/2)
+    // temporarily store the mean as the y it will be adjusted 
+    // if it collides with other nodes or the wall of the space
     node.y = mean
-    split(spaces,closesti,node)
+    closest.nodes.push(node)
+  })
+  /* Handle collisions */
+  const hasCollision = (a,b) => a.y-a.height/2 < b.y+b.height/2 && a.y+a.height/2 > b.y-b.height/2
+  Object.values(columnSpaces).forEach(spaces => {
+    // Most spaces don't have any nodes in them, so we will just skip them up front
+    spaces.filter(space => space.nodes.length).forEach(space => {
+      var groups = []
+      space.nodes.forEach(node => {
+        // Split all the groups into those that collide and don't, 
+        // taking those that do out of the groups array
+        var others = [], collisions = []
+        groups.forEach(group => hasCollision(group,node) ? collisions.push(group) : others.push(group))
+        groups = others
+
+        if(collisions.length){
+          /* Had collisions, merge them into one group */
+          var box = [node].concat(...collisions)
+          // set height to numOfNodes*nheight + (numOfNodes+1)*nheight to account for outer padding
+          box.height = box.length*g.graph().nheight + (box.length+1)*g.graph().nodesep
+          // Set y to mean y of nodes bounded by the space walls
+          box.y = box.reduce((sum,node) => sum+node.y,0)/box.length
+          box.y = walls(box.y,box.height,space)
+
+          groups.push(box)
+        } else {
+          /* No collisions, create the group */
+          groups.push(Object.assign([node],{
+            // Move the y to be within the space
+            y:walls(node.y,spaceheight,space),
+            height:spaceheight
+          }))
+        }
+      })
+      groups.forEach(group => {
+        var y = group.y-group.height/2 + spaceheight/2
+        group.sort((a,b) => a.y-b.y).forEach(node => {
+          node.y = y
+          y += g.graph().nheight + g.graph().nodesep
+        })
+      })
+    })
   })
 }
 
  /**
  * Position Logics In Levels
  * -------------
- * Figure out which order the logics should be placed, and consequently
- * how many logic layers should be injected should be after each column.
+ * Figure out which order the logics should be placed, and set
+ * their level as such, (level will actually be implemented in `addLogicsToGrid`)
  */
 function positionLogicsInLevels(g){
   const lessThan = (a,b) => a < b
@@ -352,7 +401,8 @@ function positionLogicsInLevels(g){
 function splice(g,prev,node){
   var next
   
-  if(!prev){
+  // If prev set to undefined, then set it as the root
+  if(!prev){ 
     next = g.graph().root
     g.graph().root = node
   } else {
@@ -365,6 +415,7 @@ function splice(g,prev,node){
     next.prev = node
     node.next = next
   }
+  // Finally add it to the obj that it is already connected into
   g.graph().columns[node.key] = node
 }
 
@@ -406,13 +457,38 @@ function addLogicsToGrid(g){
  /**
  * Remove ANDs
  * -------------
- *  Removing all the AND logic nodes that do not go to an OR node next
+ * Removing all the AND logic nodes that do not go to an OR node next
  * This is so that if a course requries three courses, three lines are
  * going to the course. We need to not remove the ones going to OR nodes
  * cause that would make them look like they are part of the OR.
- *  For those ANDs going to ORs next, set their edge thickness 
  */
 function removeANDs(g){
+  for(var col = g.graph().root; col; col = col.next){
+    /* no need to run on the course columns */
+    if(col.type == 'course') continue;
+
+    /* Filter to remove the nodes from the list while we find them */
+    col.nodes = col.nodes.filter(n => {
+      // We are only trying to filter out the ANDs, so skip the ORs
+      if(g.node(n).op!='AND') return true;
+      // We use outs several times, so cache here
+      var outs = g.outEdges(n)
+      // If any of the edges go to an OR, then we don't want to delete it
+      if(!outs.some(e => g.node(e.w).op=='OR')){
+        // Set a new edge for every in by every out, with the in data copied
+        g.inEdges(n).forEach(in_e => {
+          outs.forEach(out_e => {
+            g.setEdge(in_e.v,out_e.w,Object.assign({},g.edge(in_e)))
+          })
+        })
+        /* Remove the node now */
+        g.removeNode(n)
+        return false // remove node
+      } else {
+        return true // Keep node
+      }
+    })
+  }
 }
 
  /**
@@ -431,6 +507,39 @@ function removeANDs(g){
  *  - The assumption that logics are always surrounded by courses, needs to be fixed
  */
 function adjustLogics(g){
+  // Considered close if on the same course level or is a course on the next level
+  const isClose = (a,b) => a[0]==b[0] || a[0]+1==b[0] && b[1] == 0
+  const washermachine = []
+  g.nodes().filter(n => g.node(n).type=='logic').forEach(n => {
+    // cacheing pre and suc cause they are expensive
+    var pre = g.predecessors(n), suc = g.successors(n)
+    var closePre = pre.filter(m => isClose(g.node(n).level,g.node(m).level))
+    var closeSuc = suc.filter(m => isClose(g.node(n).level,g.node(m).level))
+    /* All close successors are courses */
+    if(closeSuc.length && closeSuc.every(m => g.node(m).type=='course')){
+      g.node(n).y = weightedMean(g,n,closeSuc)
+    }
+    /* All close predessesors are courses */
+    else if(closePre.length && closePre.every(m => g.node(m).type=='course')){
+      g.node(n).y = weightedMean(g,n,closePre)
+    }
+    /* Else add to the washer machine */
+    else {
+      washermachine.push({
+        n:n,
+        neighbors:pre.concat(suc)
+      })
+    }
+  })
+  /* Washer Machine! */
+  // Set the Y coordinate again and again and again, 
+  // cause they need to balance out with all the others 
+  // that didn't find their place
+  for(var i = 0; i < 5; i++){
+    washermachine.forEach(washer => {
+      g.node(washer.n).y = weightedMean(g,washer.n,washer.neighbors.filter(n => !isNaN(g.node(n).y)))
+    })
+  }
 }
 
  /**
@@ -446,6 +555,7 @@ function adjustLogics(g){
  * avoid the pathing algorithm zigzagging through logic columns.
  */
 function addRouting(g){
+  
 }
 
  /**

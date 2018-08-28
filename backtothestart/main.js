@@ -30,8 +30,8 @@ g.nodes().forEach(n => {
   g.node(n).width = g.graph().nwidth * isCourse
   g.node(n).height = g.graph().nheight * isCourse
 })
-// g.removeNode('[]+')
-// g.removeNode('[]*')
+g.removeNode('[]+')
+g.removeNode('[]*')
 
 const color = (() => {
   var i = 0, colors = g.nodes().reduce((obj,n) => (g.node(n).program!=undefined && (obj[g.node(n).program] = obj[g.node(n).program] || i++),obj),{})
@@ -203,12 +203,12 @@ function routesrender(g,r){
 }
 
 /* Debugging for 'fixLeafNodes' */
-// svg.append('g').selectAll('rect')
-//   .data(Object.entries(columnSpaces).reduce((arr,[col,spaces]) => arr.concat(spaces.map(n => (n.x=g.graph().columns[col].x,n))),[]))
-//   .enter().append('line')
-//   .attr('x1',d => d.x)
-//   .attr('x2',d => d.x)
-//   .attr('y1',d => d[0])
-//   .attr('y2',d => d[1])
-//   .attr('stroke','maroon')
-//   .attr('stroke-width',10)
+svg.append('g').selectAll('rect')
+  .data(Object.entries(columnSpaces).reduce((arr,[col,spaces]) => arr.concat(spaces.map(n => (n.x=g.graph().columns[col].x,n))),[]))
+  .enter().append('line')
+  .attr('x1',d => d.x)
+  .attr('x2',d => d.x)
+  .attr('y1',d => d.from)
+  .attr('y2',d => d.to)
+  .attr('stroke','maroon')
+  .attr('stroke-width',10)
