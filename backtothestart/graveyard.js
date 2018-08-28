@@ -263,3 +263,60 @@ line.req.active.co { stroke:#00857B }
 line.req.disabled.concur { stroke:#E5A5E0; }
 line.req.active.concur { stroke:#5E0057; }
 */
+
+  // Assign the x coordinate to all the logics
+  // But we have no gaurentee that all the logics will 
+  // fit within the space between course columns, so we
+  // need to adjust all of the course columns as we go along
+  var newColumns = {}
+  for(var courseCol=0,offset=0; courseCol <= g.graph().grid.length; courseCol++){
+    // Manipulate the grid to spread by the offset
+    if(courseCol){
+      var col = g.graph().grid[courseCol-1]
+      newColumns[col.x+offset] = g.graph().columns[col.x]
+      col.x += offset
+      col.nodes.forEach(n => {
+        g.node(n).x += offset
+      })
+    }
+    // handle slots without anything in them (can't do filter cause that would mess up the iterator)
+    if(!slots[courseCol]) continue;
+    slots[courseCol].forEach((level,logicCol) => {
+      level.forEach(n => {
+        // if courseCol is 0, then use 0. otherwise find that columns x
+        g.node(n).x = (courseCol && g.graph().grid[courseCol-1].x) + g.graph().layersep*logicCol
+      })
+      offset += g.graph().layersep
+    })
+    offset += g.graph().layersep
+  }
+  g.graph().columns = newColumns
+  g.graph().width += offset
+
+
+  /* Compile Grid */
+  g.nodes().filter(n => g.node(n).type=='logic')
+  .reduce((cols,n) => {
+    cols[g.node(n).x] = cols[g.node(n).x] || {x:g.node(n).x,type:'logic',nodes:[]}
+    cols[g.node(n).x].nodes.push(n)
+    return cols
+  },g.graph().columns)
+g.graph().grid = Object.entries(g.graph().columns)
+  .sort((a,b) => a[0] - b[0])
+  .map((a,i) => a[1])
+  // Insert an extra logic column in front of every course column
+  .reduce((arr,col,i,grid) => {
+    col.ci = arr.length
+    arr.push(col)
+    if(grid[i+1] && grid[i+1].type == 'course'){
+      var extraCol = {
+        x:col.x+g.graph().layersep,
+        type:'logic',
+        nodes:[],
+        ci:arr.length,
+      }
+      g.graph().columns[extraCol.x] = extraCol
+      arr.push(extraCol)
+    }
+    return arr
+  },[])

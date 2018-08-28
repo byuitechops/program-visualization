@@ -5,17 +5,19 @@ const $highlight = svg.append('g').classed('highlighter',true)
 const $nodes = svg.append('g').classed('nodes',true)
 const $groups = svg.append('g').classed('groups',true)
 
+const useTemporaryLines = true
+
 // Create the input graph
 const g = dagre.graphlib.json.read(reqTree)
   .setGraph({
     rankdir:'LR',
     nodesep:3,
     edgesep:0,
-    ranksep:20,
+    ranksep:useTemporaryLines ? 20 : 20,
     marginx:50,
     nwidth:100,
     nheight:20,
-    layersep:5,
+    layersep:useTemporaryLines ? 10 : 5,
     lanesep:3,
     andsep:1.5,
   })
@@ -28,15 +30,14 @@ g.nodes().forEach(n => {
   g.node(n).width = g.graph().nwidth * isCourse
   g.node(n).height = g.graph().nheight * isCourse
 })
-g.removeNode('[]+')
-g.removeNode('[]*')
+// g.removeNode('[]+')
+// g.removeNode('[]*')
 
 const color = (() => {
   var i = 0, colors = g.nodes().reduce((obj,n) => (g.node(n).program!=undefined && (obj[g.node(n).program] = obj[g.node(n).program] || i++),obj),{})
   return n => colors[n]!=undefined ? d3.interpolateRainbow(colors[n]/i-1) : '#999'
 })()
 const r = layout.time(g)
-const useTemporaryLines = true
 // render(clone)
 render(g,r)
 // routesrender(g,r)
@@ -99,6 +100,7 @@ function updateStates(g){
 }
 
 function render(g){
+  g.nodes().forEach(n => (g.node(n).y=g.node(n).y||0,g.node(n).x=g.node(n).x||0))
   // Create Joined Data selections
   var _nodes = $nodes.selectAll('g')
     .data(g.nodes().filter(n => g.node(n).type!='group'),function(d){ return d ? d : this.getAttribute('data-id') })
@@ -201,12 +203,12 @@ function routesrender(g,r){
 }
 
 /* Debugging for 'fixLeafNodes' */
-svg.append('g').selectAll('rect')
-  .data(columnSpaces.reduce((arr,spaces,i) => arr.concat(spaces.map(n => (n.x=g.graph().grid[i].x,n))),[]))
-  .enter().append('line')
-  .attr('x1',d => d.x)
-  .attr('x2',d => d.x)
-  .attr('y1',d => d[0])
-  .attr('y2',d => d[1])
-  .attr('stroke','maroon')
-  .attr('stroke-width',10)
+// svg.append('g').selectAll('rect')
+//   .data(Object.entries(columnSpaces).reduce((arr,[col,spaces]) => arr.concat(spaces.map(n => (n.x=g.graph().columns[col].x,n))),[]))
+//   .enter().append('line')
+//   .attr('x1',d => d.x)
+//   .attr('x2',d => d.x)
+//   .attr('y1',d => d[0])
+//   .attr('y2',d => d[1])
+//   .attr('stroke','maroon')
+//   .attr('stroke-width',10)

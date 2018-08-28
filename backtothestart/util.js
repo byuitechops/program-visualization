@@ -35,3 +35,8 @@ function weightedMean(g,n,nodes){
   })
   return sum/totalweight
 }
+
+function compareLevels(a,b,fn){
+  // if they are not on the same course column, compare course column, other wise logic column
+  return a[0] != b[0] ? fn(a[0],b[0]) : fn(a[1],b[1])
+}

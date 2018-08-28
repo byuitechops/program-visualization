@@ -41,11 +41,6 @@ function groupCourses(name,children,grouptype){
     type:'group',
     grouptype:grouptype,
     width:g.graph().nwidth,
-    // Adding up the heights instead of numchildren*nheight, cause nested groups have abnormal heights
-    // Same Parent groups need to account for nodesep, 
-    // concurrent groups don't have nodesep
-    height: children.reduce((sum,n) => sum+g.node(n).height,0) + 
-      (children.length-1)*g.graph().nodesep*(grouptype=='same parent'),
     coursechildren:children,
     // level is incremented in the rootparent function, if nested groups are found
     level:0
@@ -54,6 +49,13 @@ function groupCourses(name,children,grouptype){
   children
     .map(child => rootparent(child))
     .forEach(child => g.setParent(child,name))
+
+  // Setting height afterwards for the case of nested groups
+  // Adding up the heights instead of numchildren*nheight, cause nested groups have abnormal heights
+  // Same Parent groups need to account for nodesep, 
+  // concurrent groups don't have nodesep
+  g.node(name).height = g.children(name).reduce((sum,n) => sum+g.node(n).height,0) + 
+    (g.children(name).length-1)*g.graph().nodesep*(grouptype=='same parent')
 }
 /* Find all the groups and send them to `groupCourses` */
 function createGroups(g){
@@ -183,16 +185,34 @@ function rundagre(g){
  * later.
  */
 function createGrid(g){
-  g.graph().columns = g.nodes()
+  /* Collect all the nodes by there x coordinate */
+  var columns = g.nodes()
     .filter(n => g.node(n).type!='logic')
     .reduce((cols,n) => {
-      cols[g.node(n).x] = cols[g.node(n).x] || {x:g.node(n).x,type:g.node(n).type,nodes:[]}
+      cols[g.node(n).x] = cols[g.node(n).x] || {x:g.node(n).x,type:'course',nodes:[]}
       cols[g.node(n).x].nodes.push(n)
       return cols
     },{})
-  g.graph().grid = Object.entries(g.graph().columns)
+    
+  /* Sort the columns by x coordinate, then turn into something like a linked list */
+  g.graph().columns = Object.entries(columns)
     .sort((a,b) => a[0] - b[0])
-    .map((a,i) => (a[1].ci=i,a[1]))
+    .map(([,col],i) => {
+      col.level = [i+1,0]
+      col.key = col.level.join('.')
+      col.nodes.forEach(n => {
+        g.node(n).level = col.level
+        g.node(n).colkey = col.key
+      })
+      return col
+    })
+    .reduce((obj,col,i,grid) => {
+      col.prev = grid[i-1]
+      col.next = grid[i+1]
+      obj[col.key] = col
+      return obj
+    },{})
+  g.graph().root = g.graph().columns['1.0']
 }
 
  /**
@@ -240,14 +260,15 @@ function fixLeafNodes(g){
       [node.y+(node.height/2),space[i][1]])
   }
   /* Get all the leafs */
-  // are not part of a group, have no successors, and only one parent
-  var leafs = g.sinks().filter(n => 
-      !g.parent(n) && 
-      g.node(n).type == 'course' && 
-      g.predecessors(n).length == 1)
+  // are not part of a group, and have only one neighbor
+  var leafs = g.nodes().filter(n => 
+      !g.parent(n) &&
+      g.node(n).type == 'course' &&
+      g.neighbors(n).length == 1)
   
   /* Find all the spaces in each column */
-  var columnSpaces = window.columnSpaces = g.graph().grid.map(col => {
+  var columnSpaces = window.columnSpaces = {}
+  for(var col = g.graph().root; col; col = col.next){
     var spaces = [[0,g.graph().height]]
     col.nodes
       .filter(n => !g.parent(n) && !leafs.includes(n))
@@ -259,16 +280,18 @@ function fixLeafNodes(g){
           split(spaces,i,g.node(n))
         }
       })
-    return spaces
-  })
+    columnSpaces[col.key] = spaces
+  }
+
   /* Insert the leafs into the spaces */
   // TODO: find some importance to sort the leafs by
   leafs.forEach(n => {
     var node = g.node(n),
-      parents = findCourses(g,n,'predecessors'),
+      parents = findCourses(g,n,g.predecessors(n).length?'predecessors':'successors'),
       mean = weightedMean(g,n,parents),
-      spaces = columnSpaces[g.graph().columns[node.x].ci]
+      spaces = columnSpaces[node.colkey]
       closesti=null,closestdist=null
+
     /* Find the closest space that has room */
     spaces.forEach(([from,to],i) => {
       if(to-from > spaceheight){ /* has room */
@@ -297,26 +320,87 @@ function fixLeafNodes(g){
  * -------------
  * Figure out which order the logics should be placed, and consequently
  * how many logic layers should be injected should be after each column.
- * 
- * These calculations are done lazily, using pixels instead of discrete layers
- * which makes a lot of bad assumptions
- * 
- * Assumptions
- *  - ranksep is greater than the number of logic layers needed * layersep
- *  - layersep is not 0
  */
 function positionLogicsInLevels(g){
+  const lessThan = (a,b) => a < b
+  /* Recursively find the farthest parent each node has, and push them to the next array in slots */
+  g.nodes().forEach(function ranker(n){
+    if(g.node(n).type == 'logic' && g.node(n).x == undefined){
+      var farthest = g.predecessors(n)
+        // recurse if they also do not have their level set
+        .map(n => g.node(n).level || ranker(n))
+        // Find the farthest parent
+        .reduce((max,level) => compareLevels(max,level,lessThan) ? level : max,[0,0])
+
+      g.node(n).level = farthest.slice()
+      g.node(n).level[1]++ // Increment to the next logic column
+      g.node(n).colkey = g.node(n).level.join('.')
+    }
+    return g.node(n).level
+  })
 }
 
  /**
- * Compile Grid
+ * Add Logics To Grid
  * -------------
- * It is useful later to iterate through the nodes, based on which column
- * they are in. This complies that ordering and saves it to the g.graph()
- * 
- * This function also injects the extra logic layer needed before a coure layer.
+ * The logics now have their level assigned, so now we can add them to 
+ * the grid. Also need to add in an extra empty logic column in front
+ * of every course column. So that the edges coming out of the last logic
+ * column before a course column has room to get to where it needs to go.
  */
-function compileGrid(g){
+/* Helper function to insert node into g.graph().columns */
+function splice(g,prev,node){
+  var next
+  
+  if(!prev){
+    next = g.graph().root
+    g.graph().root = node
+  } else {
+    next = prev.next
+    prev.next = node
+    node.prev = prev
+  }
+
+  if(next){
+    next.prev = node
+    node.next = next
+  }
+  g.graph().columns[node.key] = node
+}
+
+function addLogicsToGrid(g){
+  // cache this function, so that we don't have to keep creating it
+  const greaterThan = (a,b) => a > b
+  /* Insert all of the logics */
+  g.nodes().filter(n => g.node(n).type == 'logic').forEach(n => {
+    var node = g.node(n), col = g.graph().columns[node.colkey]
+    // if column doesn't exist, then create it
+    if(!col){
+      col = {level:node.level,key:node.colkey,type:'logic',nodes:[]}
+      var prev, iter = g.graph().root
+      // Find the spot it is supposed to go in
+      while(iter && compareLevels(node.level,iter.level,greaterThan)){ prev = iter; iter = iter.next }
+      // Insert it into the grid at that spot
+      splice(g,prev,col)
+    }
+    col.nodes.push(n)
+  })
+  /* Insert the extra logic columns */
+  for(var col = g.graph().root; col; col = col.next){
+    // if the next column is a course then insert here
+    if(col.next && col.next.type == 'course'){
+      var level = col.level.slice()
+      level[1]++
+      splice(g,col,{
+        level:level,
+        key:level.join('.'),
+        type:'logic',
+        nodes:[]
+      })
+      // jump the iterator over the one we just created
+      col = col.next
+    }
+  }
 }
 
  /**
@@ -396,6 +480,31 @@ function assignLanes(g,r){
  * of the x coordinates, of all the nodes of both graphs.
  */
 function adjustColSpacing(g,r){
+  var x = g.graph().marginx || 0
+  for(var col = g.graph().root; col; col = col.next){
+    if(col.type=='course'){
+      if(col.prev){
+        // buffer between this column and the last
+        x += g.graph().ranksep/2
+      }
+      x += g.graph().nwidth
+      col.nodes.forEach(n => {
+        g.node(n).x = x
+      })
+      if(col.next){
+        // other half of the buffer
+        x += g.graph().ranksep/2
+      }
+    } else {
+      col.nodes.forEach(n => {
+        g.node(n).x = x
+      })
+      if(col.next && col.next.type!='course'){
+        x += g.graph().layersep
+      }
+    }
+  }
+  g.graph().width = x + (g.graph().marginx||0)
 }
 
  /**
@@ -415,7 +524,7 @@ function layout(g){
   orderGroupChildren.time(g)
   fixLeafNodes.time(g)
   positionLogicsInLevels.time(g)
-  compileGrid.time(g)
+  addLogicsToGrid.time(g)
   removeANDs.time(g)
   adjustLogics.time(g)
   const r = addRouting.time(g)
