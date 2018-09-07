@@ -3,14 +3,12 @@ An attempt to visualize an entire program (degree logic, requisite logic, catalo
 
 [prototype](/prototype.pdf)
 
-### proof of concepts
-[Drawing a line with round corners](/experiments/arc.html)
+## Models
+[Accounting](/backtothestart/index.html)
 
-[Raw placement of courses](/copout/index.html)
+[Art Education](/backtothestart/arted.html)
 
-[Prideful Failure](/experiments/failure.2.html)
-
-[Actual Progress](/backtothestart/index.html)
+[Computer Science](/backtothestart/computerscience.html)
 
 ## Use Cases
 
