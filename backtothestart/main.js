@@ -21,8 +21,8 @@ const g = dagre.graphlib.json.read(reqTree)
   })
 
 // Some Graph Adjustments, mostly temporary
-var comp = dagre.graphlib.alg.components(g).reduce((longest,n) => n.length>longest.length?n:longest)
-g.nodes().filter(n => !comp.includes(n)).forEach(n => g.removeNode(n))
+// var comp = dagre.graphlib.alg.components(g).reduce((longest,n) => n.length>longest.length?n:longest)
+// g.nodes().filter(n => !comp.includes(n)).forEach(n => g.removeNode(n))
 g.nodes().forEach(n => {
   var isCourse = g.node(n).type == 'course'
   g.node(n).width = g.graph().nwidth * isCourse
@@ -33,7 +33,7 @@ g.removeNode('[]*')
 
 const color = (() => {
   var i = 0, colors = g.nodes().reduce((obj,n) => (g.node(n).program!=undefined && (obj[g.node(n).program] = obj[g.node(n).program] || i++),obj),{})
-  return n => colors[n]!=undefined ? d3.interpolateRainbow(colors[n]/i-1) : '#999'
+  return n => colors[n]!=undefined ? d3.interpolateRainbow(colors[n]/(i-1)) : '#999'
 })()
 const r = layout.time(g)
 // render(clone)
