@@ -4,15 +4,12 @@ const $edges = svg.append('g').classed('edges',true)
 const $highlight = svg.append('g').classed('highlighter',true)
 const $nodes = svg.append('g').classed('nodes',true)
 const $groups = svg.append('g').classed('groups',true)
-
 const useTemporaryLines = true
 
 // Create the input graph
-const g = dagre.graphlib.json.read(reqTree)
+const g = graphlib.json.read(reqTree)
   .setGraph({
-    rankdir:'LR',
     nodesep:3,
-    edgesep:0,
     ranksep:useTemporaryLines ? 20 : 20,
     marginx:50,
     nwidth:100,
@@ -20,11 +17,11 @@ const g = dagre.graphlib.json.read(reqTree)
     layersep:useTemporaryLines ? 10 : 5,
     lanesep:3,
     andsep:1.5,
+    height:window.innerHeight,
+    width:window.innerWidth,
   })
 
 // Some Graph Adjustments, mostly temporary
-var comp = dagre.graphlib.alg.components(g).reduce((longest,n) => n.length>longest.length?n:longest)
-g.nodes().filter(n => !comp.includes(n)).forEach(n => g.removeNode(n))
 g.nodes().forEach(n => {
   var isCourse = g.node(n).type == 'course'
   g.node(n).width = g.graph().nwidth * isCourse
@@ -33,15 +30,16 @@ g.nodes().forEach(n => {
 g.removeNode('[]+')
 g.removeNode('[]*')
 
-const color = (() => {
+layout.time(g)
+// routesrender(g,r)
+// updateStates(g)
+const color = colorfn(g)
+render(g)
+
+function colorfn(g){
   var i = 0, colors = g.nodes().reduce((obj,n) => (g.node(n).program!=undefined && (obj[g.node(n).program] = obj[g.node(n).program] || i++),obj),{})
   return n => colors[n]!=undefined ? d3.interpolateRainbow(colors[n]/i-1) : '#999'
-})()
-const r = layout.time(g)
-// render(clone)
-render(g,r)
-// routesrender(g,r)
-updateStates(g)
+}
 
 function predecessors(g,n,collection=[],first=true){
   collection.push(`[data-id="${n}"]`)

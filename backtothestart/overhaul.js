@@ -199,17 +199,17 @@ function createGrid(g){
     .sort((a,b) => a[0] - b[0])
     .map(([,col],i) => {
       col.level = [i+1,0]
-      col.key = col.level.join('.')
+      col.ci = col.level.join('.')
       col.nodes.forEach(n => {
         g.node(n).level = col.level
-        g.node(n).colkey = col.key
+        g.node(n).ci = col.ci
       })
       return col
     })
     .reduce((obj,col,i,grid) => {
       col.prev = grid[i-1]
       col.next = grid[i+1]
-      obj[col.key] = col
+      obj[col.ci] = col
       return obj
     },{})
   g.graph().root = g.graph().columns['1.0']
@@ -290,7 +290,7 @@ function fixLeafNodes(g){
           split(spaces,i,g.node(n))
         }
       })
-    columnSpaces[col.key] = spaces
+    columnSpaces[col.ci] = spaces
   }
 
   /* Insert the leafs into the spaces */
@@ -298,7 +298,7 @@ function fixLeafNodes(g){
     var node = g.node(n),
       parents = findCourses(g,n,g.predecessors(n).length?'predecessors':'successors'),
       mean = weightedMean(g,n,parents),
-      spaces = columnSpaces[node.colkey]
+      spaces = columnSpaces[node.ci]
       closesti=null,closestdist=null
 
     /* Find the closest space that has room */
@@ -383,7 +383,7 @@ function positionLogicsInLevels(g){
 
       g.node(n).level = farthest.slice()
       g.node(n).level[1]++ // Increment to the next logic column
-      g.node(n).colkey = g.node(n).level.join('.')
+      g.node(n).ci = g.node(n).level.join('.')
     }
     return g.node(n).level
   })
@@ -416,7 +416,7 @@ function splice(g,prev,node){
     node.next = next
   }
   // Finally add it to the obj that it is already connected into
-  g.graph().columns[node.key] = node
+  g.graph().columns[node.ci] = node
 }
 
 function addLogicsToGrid(g){
@@ -424,10 +424,10 @@ function addLogicsToGrid(g){
   const greaterThan = (a,b) => a > b
   /* Insert all of the logics */
   g.nodes().filter(n => g.node(n).type == 'logic').forEach(n => {
-    var node = g.node(n), col = g.graph().columns[node.colkey]
+    var node = g.node(n), col = g.graph().columns[node.ci]
     // if column doesn't exist, then create it
     if(!col){
-      col = {level:node.level,key:node.colkey,type:'logic',nodes:[]}
+      col = {level:node.level,ci:node.ci,type:'logic',nodes:[]}
       var prev, iter = g.graph().root
       // Find the spot it is supposed to go in
       while(iter && compareLevels(node.level,iter.level,greaterThan)){ prev = iter; iter = iter.next }
@@ -444,7 +444,7 @@ function addLogicsToGrid(g){
       level[1]++
       splice(g,col,{
         level:level,
-        key:level.join('.'),
+        ci:level.join('.'),
         type:'logic',
         nodes:[]
       })
@@ -452,6 +452,26 @@ function addLogicsToGrid(g){
       col = col.next
     }
   }
+  /* Assign all the columns an x coordinate, so that routing knows where to place stuff */
+  var x = g.graph().marginx || 0
+  for(var col = g.graph().root; col; col = col.next){
+    if(col.type=='course'){
+      // buffer between this column and the last
+      if(col.prev) x += g.graph().ranksep/2
+      // Node column width
+      x += g.graph().nwidth
+      // Set column x coordinate
+      col.x = x
+      // other half of the buffer
+      if(col.next) x += g.graph().ranksep/2
+    } else {
+      // Set column x coordinate
+      col.x = x
+      // Space between logic layers
+      if(col.next && col.next.type!='course') x += g.graph().layersep
+    }
+  }
+  g.graph().width = x + (g.graph().marginx||0)
 }
 
  /**
@@ -555,7 +575,46 @@ function adjustLogics(g){
  * avoid the pathing algorithm zigzagging through logic columns.
  */
 function addRouting(g){
+  const r = new dagre.graphlib.Graph({directed:false,multigraph:true})
+
+  /* Create a Node with the right naming convention and data */
+  function addNode(ci,y,isExit){
+    var n = ci+'['+Math.round(y)+']'+(isExit?'.exit':'')
+    if(r.node(n)!==undefined) return n; // If node already exits, don't overwrite it
+    r.setNode(n,{ci:ci,y:y,type:isExit?'exit':'route'})
+    return n
+  }
+  /* Create an edge, checking to make sure it is valid, and calculate length */
+  function addEdge(p1,p2){
+    if(p1 == p2) return;
+    if(!r.node(p1)){ throw new Error(p1+' doesn\'t exist')}
+    if(!r.node(p2)){ throw new Error(p2+' doesn\'t exist')}
+    r.setEdge(p1,p2,{weight:Math.abs(r.node(p1).x-r.node(p2).x)+Math.abs(r.node(p1).y-r.node(p2).y)})
+  }
+  /* Copy over the data from the original graph */
+  r.setGraph(g.graph())
+  g.nodes()
+    .filter(n => g.node(n).type!='group')
+    .forEach(n => {
+      var rnode = addNode(g.node(n).ci,g.node(n).y)
+      r.node(rnode).name = n // Add reference to real node we are representing
+      r.node(rnode).type = g.node(n).type // save representi's type
+      g.node(n).enter = rnode // And a reference to the route node that is representing it
+      // Create another route which is the nodes's exit 
+      // (this is to create a gap of sorts in the graph, which that pathing algorithm can't jump)
+      var exit = r.node(rnode).exit = g.node(n).exit = addNode(g.node(n).ci,g.node(n).y,true)
+      r.node(exit).name = n
+    })
   
+  /* Create all of the intermediate routes */
+  var prevLogicCols = []
+  for(var col = r.graph().root; col; col = next){
+    if(col.type=='course' && prevLogicCols.length){
+      
+    } else {
+      prevLogicCols.pop(col.ci)
+    }
+  }
 }
 
  /**
@@ -637,10 +696,10 @@ function layout(g){
   addLogicsToGrid.time(g)
   removeANDs.time(g)
   adjustLogics.time(g)
-  const r = addRouting.time(g)
-  findPaths.time(g,r)
-  assignLanes.time(g,r)
-  adjustColSpacing.time(g,r)
-  fixLogicPathAlignment.time(g,r)
-  return r
+  // const r = addRouting.time(g)
+  // findPaths.time(g,r)
+  // assignLanes.time(g,r)
+  adjustColSpacing.time(g)
+  // fixLogicPathAlignment.time(g,r)
+  // return r
 }
