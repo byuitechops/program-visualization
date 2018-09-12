@@ -2,6 +2,7 @@ const graphlib = require('@dagrejs/graphlib')
 const courses = require('../courses')
 const logic = require('./logic')
 const fs = require('fs')
+const path = require('path')
 
 
 
@@ -74,6 +75,47 @@ var foundations = [
     /* Lower Division */["ART142","ART210","ART212R","ART217","ART250","ART251","ART270","ART280","ART310","ART312R"],
     /* Upper Division */["ART310","ART312R","ART320","ART350","ART351R","ART357R","ART370","ART380","ART410R","ART412R","ART491R"],
   ]
+},{
+  name:'english',
+  subprograms:[
+    /* Introductory Module */["ENG251","ENG314"],
+    /* Core Courses */["ENG331","ENG332","ENG333","ENG336","ENG334","ENG335","ENG336","ENG350R","ENG351","ENG352","ENG353","ENG354","ENG355","ENG356","ENG325","ENG328","ENG373"],
+    /* Senior Project */["ENG452","ENG495"],
+    /* 400 Level */["ENG418R","ENG400R","ENG440","ENG450","ENG452","ENG495"],
+    /* Electives */["ENG218","ENG252","ENG290R","ENG318R","ENG321","ENG326","ENG327","ENG331","ENG332","ENG333","ENG334","ENG335","ENG336","ENG350R","ENG351","ENG352","ENG353","ENG354","ENG355","ENG356","ENG370R","ENG390","ENG397R","ENG398R","ENG400R","ENG418R","ENG440","ENG450","ENG452","ENG495"],
+  ]
+},{
+  name:'datascience',
+  subprograms:[
+    /* Core */["CIT111","CS101","CS241","MATH325","MATH425","MATH488"],
+    /* Data Wrangling */["CS335","MATH335"],
+    /* Intership */["CIT498","CS498R","MATH498R"],
+    /* Senior Project */["CIT499R","CS499","MATH499R"],
+    /* Statistics */["MATH221A","MATH221B","MATH221C"],
+    /* Analytics */["CIT381","CS450"],
+    /* Elective */["B215","CIT225","CIT381","CIT425","CS213","CS237","CS246","CS313","CS450","FDMAT112","MATH113","MATH119","MATH214","MATH215","MATH241","MATH281","MATH326","MATH341","MATH423","MATH424","B211","B320","CIT380","COMM130","DCM221","DCM350"],
+  ]
+},{
+  name:'business',
+  subprograms:[
+    /* Core */["ACCTG201","ACCTG202","B100","B211","B215","B298R"/* ,"B361" */,"B398R","ECON150","ECON151","MATH221A","B499A","B499E","B380","B483","ECON358"],
+    /* IBC */["B302","B322","B342","B301","B321","B341"],
+    /* Entrepreneurial Mangagement */["B183","B283","B383","B250","B351","B374","B475"],
+    /* Finance */["B401","B410","B428","B433","B411","B424","B413","B424","B424D","B475"],
+    /* Marketing */["B430","B446","B351","COMM322","COMM332","COMM385","B466","B468","B250","B451"],
+    /* Social Media Marketing */["COMM125","B351","B250","B451","COMM310","COMM315","COMM322","COMM397R"],
+    // /* Supply Chain Management */["B461","B466","B468","B478"],
+  ]
+},{
+  name:'construction',
+  subprograms:[
+    /* Core */["ARCH100","CONST120","ARCH190","ARCH270","CONST235","CONST260","CONST298","CONST320","CONST330","CONST350","CONST370","CONST380","CONST420","CONST430","CONST470","CONST498","CONST499"],
+    /* Architecture */["ARCH120","ARCH180","ARCH201","ARCH220","ARCH180","ARCH285","ARCH290","ARCH300","CONST290R","CONST400","DCM221","DCM225","DCM305","DCM350","ID251","ACCTG180","ACCTG201","B101","B211","B215","B225","B283","B301","B321","B341","B361","B413","ECON150","MATH221A"],
+    /* Business */["ARCH120","ARCH180","ARCH220","ARCH290","ARCH300","CONST210","CONST250","CONST290R","CONST300","CONST340","CONST400","DCM221","DCM225","DCM305","DCM350","ID251","ACCTG180","ACCTG201","B211","B215","B361","ECON150","MATH221A","MATH221B","MATH221C","B302","B322","B342","B301","B321","B341"],
+    /* Environmental Health And Safety */["ARCH300","CONST210","CONST250","CONST290R","CONST300","DCM221","DCM225","DCM305","DCM350","HS310","HS486","HS384","HS450","HS484","HS485","HS487","HS488","ACCTG180","ACCTG201","B101","B211","B215","B225","B283","B301","B321","B341","B361","B413","ECON150","MATH221A"],
+    /* Heavy Civil/Industrial */["CONST250","CONST340","ARCH120","ARCH220","ARCH290","ARCH300","CONST210","CONST290R","CONST400","DCM221","DCM225","DCM305","DCM350","ACCTG180","ACCTG201","B101","B211","B215","B225","B283","B301","B321","B341","B361","B413","ECON150","MATH221A"],
+    /* Residential/Commercial */["ARCH120","CONST210","ARCH180","ARCH201","ARCH220","ARCH290","ARCH300","CONST250","CONST290R","CONST300","CONST340","CONST400","DCM221","DCM225","DCM305","DCM350","ID251","ACCTG180","ACCTG201","B101","B211","B215","B225","B283","B301","B321","B341","B361","B370","B413","ECON150","MATH221A"],
+  ]
 }].forEach(program => {
   var reqs = new graphlib.Graph({compound:true});
 
@@ -84,7 +126,26 @@ var foundations = [
   var subprograms = program.subprograms.reduce((obj,program,i) => (program.forEach(n => obj[n] = i),obj),{})
   reqs.nodes().forEach(n => reqs.node(n).program = subprograms[n])
 
-  fs.writeFileSync(`../backtothestart/${program.name}.js`,'var reqTree = '+JSON.stringify(graphlib.json.write(reqs)));
+  fs.writeFileSync(path.resolve(__dirname,`../backtothestart/programs/${program.name}.js`),'var reqTree = '+JSON.stringify(graphlib.json.write(reqs)));
+  fs.writeFileSync(path.resolve(__dirname,`../backtothestart/programs/${program.name}.html`),`
+<html>
+  <head>
+    <link href="../style.css" type="text/css" rel="stylesheet"/>
+    <!-- Data -->
+    <script src="${program.name}.js"></script>
+    <!-- Libraries -->
+    <script src="../libraries/d3.min.js" charset="utf-8"></script>
+    <script src="../libraries/dagre.min.js"></script>
+    <script src="../libraries/ngraph.min.js"></script>
+    <!-- Helpers -->
+    <script src="../util.js"></script>
+    <script src="../layout.js"></script>
+  </head>
+  <body>
+    <script src="../main.js"></script>
+  </body>
+</html>
+  `)
 })
 
 

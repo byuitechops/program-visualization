@@ -1,0 +1,21 @@
+{
+  "name": "program-visualization",
+  "version": "1.0.0",
+  "description": "An attempt to visualize an entire program (degree logic, requisite logic, catalog changes)",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "node experiments/create-req-tree.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/byuitechops/program-visualization.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/byuitechops/program-visualization/issues"
+  },
+  "homepage": "https://github.com/byuitechops/program-visualization#readme"
+}

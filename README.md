@@ -4,11 +4,19 @@ An attempt to visualize an entire program (degree logic, requisite logic, catalo
 [prototype](/prototype.pdf)
 
 ## Models
-[Accounting](/backtothestart/index.html)
+[Accounting](/backtothestart/programs/accounting.html)
 
-[Art Education](/backtothestart/arted.html)
+[Art Education](/backtothestart/programs/arted.html)
 
-[Computer Science](/backtothestart/computerscience.html)
+[Business Management](/backtothestart/programs/business.html)
+
+[Computer Science](/backtothestart/programs/computerscience.html)
+
+[Construction Management](/backtothestart/programs/construction.html)
+
+[Data Science](/backtothestart/programs/datascience.html)
+
+[English](/backtothestart/programs/construction.html)
 
 ## Use Cases
 
