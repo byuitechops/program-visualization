@@ -31,7 +31,7 @@ function groupCourses(name,children,grouptype){
     }
   }
   // naming conventions just help with debugging
-  name = '{'+name+'}' 
+  name = '{'+name+'}'
   var checked = []
   /* Recursively finds the root parent of the given node, 
   incrementing level if nested group is found */
@@ -137,139 +137,295 @@ function fixCycles(){
  * -------------
  * Greedy algorithm to determine which rank to put each node on.
  */
-function rankNode(g,n){
+function rankNode(g,grid,n){
   // cache this function so that it isn't create a million times
   const greaterThan = (a,b) => a > b
   // save these to variables purely for convience
   var node = g.node(n)
-  var grid = g.graph().grid
-
-  if(node.r == null){
+  if(node.rank == null){
     // get the ranks of our parents (recursing if they do not have a rank assigned yet)
-    var parents = g.predecessors(n).map(n => g.node(n).r != null ? g.node(n) : rankNode(g,n))
-    
+    var parents = g.predecessors(n).map(n => g.node(n).rank != null ? g.node(n) : rankNode(g,grid,n))
+
     // If adding the parents some how added ours, then we are done
-    if(node.r != null) return node
+    if(node.rank != null) return node
 
     // Find which parent is the farthest forward
-    var parent = parents.reduce((r,node) => {
-      return compareLevels(grid(r).rank,grid(node.r).rank,greaterThan) ? r : node.r
-    },0)
+    var parent = parents.reduce((farthest,node) => {
+      return compareLevels(node.rank,farthest.rank,greaterThan) ? node : farthest
+    },grid[0][0])
 
     // Add this node to the column after our furthest parent
     // minor step if a logic, major step if a course
-    node.rank = grid(parent).rank.slice()
+    node.rank = parent.rank.slice()
     if(node.type=='logic'){
       node.rank[1]++
-      node.r = node.rank.join('.')
-      if(!grid(node.r)){
-        // console.log(node.r,grid(node.rank[0]).children(),grid(node.rank[0]).head,grid(node.rank[0]).tail)
-        grid(node.rank[0]).push(node.r,{
-          type:'logic',
-          rank:node.rank,
-          nodes:[],
-          height:-g.graph().nodesep
-        })
-
-      }
     } else {
       node.rank[0]++
       node.rank[1]=0
-      node.r = node.rank[0]
-      if(!grid(node.r)){
-        // console.log(grid(node.r).children())
-        grid(grid.head.id).push(node.r,{
-          type:'course',
-          rank:node.rank,
-          nodes:[],
-          height:-g.graph().nodesep
-        })
+    }
+    var col = grid[node.rank[0]] && grid[node.rank[0]][node.rank[1]]
+    // if col is not already in the grid
+    if(!col){
+      // create the column
+      grid[node.rank[0]] = grid[node.rank[0]] || []
+      col = grid[node.rank[0]][node.rank[1]] = {
+        type:node.type,
+        rank:node.rank,
+        nodes:[],
       }
     }
+    // Don't want to add the sub nodes, yet just the parent groups
     if(!g.parent(n)){
-      grid(node.r).nodes.push(n)
-      grid(node.r).height += (node.height||0) + g.graph().nodesep
+      col.nodes.push(n)
     }
   }
 
   // We still need to check that all of our children have a rank even
   // if this node has already gotten it's rank assigned
-  g.successors(n).filter(n => g.node(n).r == null).forEach(n => rankNode(g,n))
+  g.successors(n).filter(n => g.node(n).r == null).forEach(n => rankNode(g,grid,n))
 
   return node
 }
 
 function ranking(g){
-  g.graph().grid = poptart()
-  g.graph().root = g.graph().grid.head.push(0,{rank:[0,0]})
+  var grid = [[{rank:[0,0],type:'root'}]]
 
   // for each component in our graph get the recursive rank function running
   graphlib.alg.components(g).forEach(component => {
-    rankNode(g,component[0])
+    rankNode(g,grid,component[0])
   })
 
   // Add in the extra logic columns
-  // for(var col = g.graph().root.next; col; col = col.next){
-  //   if(col.p){
-  //     // col.insertBefore()
-  //     console.log(col.prev && col.prev.length)
-  //   }
-  // }
-}
+  for(var c = 0; c < grid.length; c++){
+    // this will make the last column of the grid a 'logic' column, 
+    // but that's okay because of the rare case of a course in the 
+    // last column needing to cycle back to a previous node
 
-function initialPositions(g){
-  var x = g.graph().marginx||0
-  var height = 0
-  for(var col = g.graph().root.next; col; col = col.next){
-    height = Math.max(height,col.height)
+    // don't add one for first column, unless there are logic nodes first 
+    if(grid[c][0].type != 'root' || grid[c].length != 1){
+      grid[c].push({
+        type:'logic',
+        rank:[c,grid[c].length],
+        nodes:[],
+      })
+    }
   }
-  for(var col = g.graph().root.n; col; col = col.n){
-    var y = g.graph().marginy||0
 
-    if(col.type=='course'){
-      if(col.prev != g.graph().root){
-        // buffer between this column and the last
-        x += g.graph().ranksep/2
-      }
-      x += g.graph().nwidth
-      // sort the nodes alphabetically by name, to preliminarily group similar types
-      col.nodes.sort().forEach(n => {
-        g.node(n).x = x
-        y += g.node(n).height/2
-        g.node(n).y = y
-        y += g.node(n).height/2 + g.graph().nodesep
-      })
-      if(col.n){
-        // other half of the buffer
-        x += g.graph().ranksep/2
-      }
-    } else {
-      col.nodes.forEach(n => {
-        g.node(n).x = x
-        y += g.graph().nheight/2
-        g.node(n).y = y
-        y += g.graph().nheight/2 + g.graph().nodesep
-      })
-      if(col.next){
-        x += g.graph().layersep
+  g.graph().getColumn = function(c,l){
+    // saving the grid in this function
+    // won't be accesable otherwise
+    if(Array.isArray(c)) l = c[1], c = c[0]
+    if(l == undefined) l = 0
+    return grid[c] && grid[c][l]
+  }
+
+  g.graph().columns = []
+  for(var c = 0; c < grid.length; c++){
+    for(var l = 0; l < grid[c].length; l++){
+      if(grid[c][l].type != 'root'){
+        g.graph().columns.push(grid[c][l])
       }
     }
   }
+}
+
+/**
+ * Initial Positions
+ * -------------
+ * Setting the X and Y coordinate of each node, so that the ordering algorithm has
+ * something to work with when doing all of it's collision detection and such. Also
+ * adding a couple of arbitrary heuristics to improve the output of the ordering 
+ * algorithm. These include justifying the node's vertical position so that they are
+ * evenly spread out with plenty of room to play with. Also ording the nodes in alphabetical
+ * order where they have a good chance of being next to the ones that they should
+ * be next to (same department)
+ */
+function initialPositions(g){
+  var x = g.graph().marginx||0
+  var maxheight = 0
+  // Find the tallest column, so that we can vertically center all of the columns
+  g.graph().columns.forEach(col => {
+    col.height = col.nodes.reduce((sum,n) => sum+g.node(n).height,0)
+    maxheight = Math.max(maxheight,col.height + (col.nodes.length-1)*g.graph().nodesep)
+  })
+  // maxheight = maxheight * 1.3
+  g.graph().columns.forEach((col,ci) => {
+    var y = g.graph().marginy||0// + (maxheight-col.height)/2
+    // padding between layers
+    x += g.graph().layersep
+    // account for node width (shouldn't vary between nodes)
+    if(col.type == 'course') x += g.graph().nwidth
+    col.x = x
+    // set the node coordinates
+    col.nodes.sort().forEach((n,i) => {
+      g.node(n).x = x
+      // account for spacing between nodes
+      if(i != 0) y += (maxheight-col.height)/(col.nodes.length-1)
+      // padded by node height
+      y += g.node(n).height/2
+      g.node(n).y = y
+      y += g.node(n).height/2
+    })
+  })
+  g.graph().groups.forEach(p => {
+    g.children(p).forEach(n => {
+      g.node(n).x = g.node(p).x
+      g.node(n).y = g.node(p).y
+    })
+  })
   g.graph().width = x + (g.graph().marginx||0)
-  g.graph().height = height + (g.graph().marginy||0)
+  g.graph().height = maxheight + (g.graph().marginy||0)
 }
 
-function order(g){
-    // how much room a space has (range - num of nodes * nodespace)
-    const room = s => s.nodes.reduce((sum,n) => sum+g.node(n).height,0) + (s.nodes.length-1)*g.graph().nodesep*2
+function* order(g){
+  const hasCollision = (a,b) => a.y-a.height/2 < b.y+b.height/2 && a.y+a.height/2 > b.y-b.height/2
+  const breaksize = 6
+  function calcPosition(group){
+    var height = (group.length-1) * (g.graph().nheight+g.graph().nodesep)
+    var sum = 0, count = 0
+    group.forEach(box => {
+      height += box.length * g.graph().nodesep
+      count += box.length
+      box.forEach(n => {
+        height += g.node(n).height
+        sum += g.node(n).y
+      })
+    })
+    // Set height to sum height of all nodes, 
+    //  plus nheight for seperation between each box
+    //  plus nodesep for each node
+    group.height = height
+    // Set Y to 
+    group.y = sum/count
+  }
+  function mergeGroups(groups,group){
+    groups.forEach(otherGroup => {
+      otherGroup.forEach(box => {
+        box.forEach(n => {
+          var k = 0, node = g.node(n)
+          // node is not allowed to be in the same box as another node who was in the same group but different box
+          // because they have already been seperated, so keep them sepereated
+          // console.log(n,node.group,node.box)
+          // group[k].filter(n => g.node(n).group).forEach(n => console.log(n,g.node(n).group == node.group,g.node(n).box != node.box))
+          while(node.group && group.box && group[k].filter(n => g.node(n).group).some(n => g.node(n).group == node.group && g.node(n).box != node.box)){
+            ++k
+            group[k] = group[k] || []
+          }
+          group[k].push(n)
+        })
+      })
+    })
+  }
+  
+  for(var round = 0; round < 100; round++){
+    var nodes = []
+    // TODO: There is probably be a good heuristic order in 
+    // which to sort the nodes by (least amount of connections 
+    // to greatest or something)
+    for(var ci = 0; ci < g.graph().columns.length; ci++){
+      var col = g.graph().columns[ci]
+      var groups = []
+      for(var ni = 0; ni < col.nodes.length; ni++){
+        var n = col.nodes[ni]
+        /* Temporarily set node's Y to it's optimal position */
+        var node = g.node(n)
+        node.y = weightedMean(g,n,g.neighbors(n))
+        var position = {
+          y: node.y,
+          // add the padding
+          height: node.height + g.graph().nodesep
+        }
+        var group = Object.assign([Object.assign([n],position)],position)
 
+        var done = false;
+        while(!done){
+          /* Remove all the groups that have collisions */
+          var collisions = [], other = []
+          groups.forEach(otherGroup => hasCollision(otherGroup,group) ? collisions.push(otherGroup) : other.push(otherGroup))
+          groups = other
+
+          /* If no collisions exit the loop */
+          if(collisions.length == 0){ 
+            done = true
+            continue
+          }
+
+          /* Had collisions, merge them into one group */
+          mergeGroups(collisions,group)
+
+          /* Calculate the new position of the combined group */
+          calcPosition(group)
+        }
+        groups.push(group)
+
+        nodes.push(n)
+        col.groups = groups
+        // yield nodes
+      }
+      /* Position nodes within groups according to where they want to be */
+      groups.forEach(group => {
+        var y = group.y - group.height/2// + g.graph().nodesep/2
+
+        group.forEach(box => {
+          var nodes = box.map(n => {
+            var pull = g.neighbors(n).reduce((sum,n) => sum+(g.node(n).y-group.y),0)
+            return {n,pull}
+          }).sort((a,b) => a.pull-b.pull).map(n => n.n)
+          
+          var breaks = nodes.slice(0,-1)
+            .map((n,i) => {
+              var dist = g.node(nodes[i+1]).y - g.node(n).y
+              return {n,dist}
+            })
+            .sort((a,b) => b.dist-a.dist)
+            .slice(0,group.numbreaks)
+            .reduce((obj,{n}) => (obj[n] = true,obj),{})
+
+          // Create new grouping to be referenced during the next run
+          var k = 0
+          var boxes = nodes.reduce((boxes,n) => {
+            g.node(n).box = boxes[k]
+            g.node(n).group = boxes
+            boxes[k].push(n)
+            if(breaks[n]){
+              boxes.push([])
+              k++
+            }
+            return boxes
+          },[[]])
+
+          // Object.keys(breaks).length && console.log(breaks)
+          
+          box.forEach(n => {
+            y += g.node(n).height/2
+            g.node(n).y = y
+            g.children(n).forEach(n => g.node(n).y = y)
+            y += g.node(n).height/2 + g.graph().nodesep
+          })
+          y += g.graph().nheight + g.graph().nodesep
+        })
+      })
+    }
+    var max = Math.max(...g.nodes().map(n => g.node(n).y+g.node(n).height/2))
+    var min = Math.min(...g.nodes().map(n => g.node(n).y-g.node(n).height/2))
+    // svg.attr('viewport',[
+    //   // 0,
+    //   // min,
+    //   // g.graph().width,
+    //   // max,
+    //   0,0,100,100
+    // ].join(' '))
+    // g.nodes().forEach(n => g.node(n).y += 0-min)
+    // g.graph().columns.filter(col => col.groups).forEach(col => col.groups.forEach(group => group.y += 0-min))
+    g.graph().height = max-min
+    yield
+  }
 }
 
-
-
-function layout(g){
+function* layout(g){
   createGroups.time(g)
   fixCycles.time(g)
   ranking.time(g)
   initialPositions.time(g)
+  yield * order.time(g)
 }

@@ -4,16 +4,16 @@ const $edges = svg.append('g').classed('edges',true)
 const $highlight = svg.append('g').classed('highlighter',true)
 const $nodes = svg.append('g').classed('nodes',true)
 const $groups = svg.append('g').classed('groups',true)
+const $debug1 = svg.append('g').classed('debug1',true)
+const $debug2 = svg.append('g').classed('debug2',true)
 const useTemporaryLines = true
 
-// Create the input graph
 const g = graphlib.json.read(reqTree)
   .setGraph({
-    nodesep:3,
-    ranksep:useTemporaryLines ? 20 : 20,
-    marginx:50,
     nwidth:100,
     nheight:20,
+    nodesep:3,
+    // marginx:50,
     layersep:useTemporaryLines ? 10 : 5,
     lanesep:3,
     andsep:1.5,
@@ -25,16 +25,24 @@ const g = graphlib.json.read(reqTree)
 g.nodes().forEach(n => {
   var isCourse = g.node(n).type == 'course'
   g.node(n).width = g.graph().nwidth * isCourse
-  g.node(n).height = g.graph().nheight * isCourse
+  // keep the height on logic nodes as padding in the algorithms
+  g.node(n).height = g.graph().nheight
 })
+
 g.removeNode('[]+')
 g.removeNode('[]*')
 
-layout.time(g)
+const color = colorfn(g)
+{(async () => {
+  for(var nodes of layout.time(g)){
+    render(g,nodes)
+    await new Promise(res => window.onclick = res)
+    // await new Promise(res => setTimeout(res,100))
+  }
+  render(g)
+})()}
 // routesrender(g,r)
 // updateStates(g)
-const color = colorfn(g)
-render(g)
 
 function colorfn(g){
   var i = 0, colors = g.nodes().reduce((obj,n) => (g.node(n).program!=undefined && (obj[g.node(n).program] = obj[g.node(n).program] || i++),obj),{})
@@ -97,19 +105,20 @@ function updateStates(g){
   })
 }
 
-function render(g){
+function render(g,nodes){
   g.nodes().forEach(n => (g.node(n).y=g.node(n).y||0,g.node(n).x=g.node(n).x||0))
+  nodes = nodes || g.nodes().filter(n => g.node(n).type!='group')
   // Create Joined Data selections
   var _nodes = $nodes.selectAll('g')
-    .data(g.nodes().filter(n => g.node(n).type!='group'),function(d){ return d ? d : this.getAttribute('data-id') })
-  var _edges = $edges.selectAll('path')
+    .data(nodes,function(d){ return d ? d : this.id})
+  var _edges = $edges.selectAll('line')
     .data(g.edges(),function(d){ return d ? d.v+'-'+d.w : this.getAttribute('data-source')+'-'+this.getAttribute('data-target') })
   var _groups = $groups.selectAll('rect')
-    .data(g.graph().groups.filter(n => g.node(n)),function(d){ return d ? d : this.getAttribute('data-id') })
+    .data(g.graph().groups.filter(n => g.node(n)),function(d){ return d ? d : this.id })
 
   // Update elements with the new calculations
   var enteringNodes = _nodes.enter().append('g')
-    .attr('data-id',n => n)
+    .attr('id',n => n)
     .attr('data-type',n => g.node(n).op || g.node(n).type)
     .on('mouseover',n => highlight(n,true))
     .on('mouseout',n =>  highlight(n,false))
@@ -130,16 +139,18 @@ function render(g){
     .attr('y2',n => g.node(n).height-1.5)
     .attr('stroke',n => color(g.node(n).program))
   enteringNodes.filter(n => g.node(n).type!='course'&&g.node(n).type!='group').append('circle')
+  function transform(n){
+    var node = g.node(n)
+    var isCourse = node.type != 'logic'
+    return `translate(${[node.x-(node.width*isCourse),node.y-(node.height/2*isCourse)]})`
+  }
   enteringNodes.merge(_nodes)
-    .attr('transform',n => {
-      var node = g.node(n)
-      return `translate(${[node.x-(node.width||0),node.y-(node.height||0)/2]})`
-    })
+    .attr('transform',transform)
   _nodes.exit().remove()
 
   var entering = _edges.enter().append(useTemporaryLines ? 'line' : 'path')
-    .attr('data-source',e => g.edge(e).v || e.v)
-    .attr('data-target',e => g.edge(e).w || e.w)
+    .attr('data-source',e => e.v)
+    .attr('data-target',e => e.w)
     .attr('data-type',e => g.edge(e).type)
   if(useTemporaryLines){ // For debugging
     entering.merge(_edges)
@@ -160,20 +171,53 @@ function render(g){
 
   var thickness = 1.5
   _groups.enter().append('rect')
-    .attr('data-id',n => n)
+    .attr('id',n => n)
     .attr('data-type',n => g.node(n).type)
     .attr('data-grouptype',n => g.node(n).grouptype)
     .attr('stroke-width',thickness)
   .merge(_groups)
     .attr('x',n => g.node(n).x-g.graph().nwidth+thickness/2)
     .attr('y',n => g.node(n).y-g.node(n).height/2-thickness/2)
-    .attr('width',n => g.node(n).width-thickness)
+    .attr('width',n => g.graph().nwidth-thickness)
     .attr('height',n => g.node(n).height+thickness)
   _groups.exit().remove()
 
   svg
     .attr('width',g.graph().width)
     .attr('height',g.graph().height+g.graph().nodesep)
+
+  /* Debugging for ordering algorithm */
+  var groups = [].concat(...g.graph().columns.filter(col => col.groups).map(col => col.groups.map(group => (group.x=col.x,group.type=col.type,group))))
+  var _groups = $debug1.selectAll('line')
+    .data(groups)
+  _groups.enter().append('line')
+    .merge(_groups)
+    .attr('x1',d => d.x-g.graph().nwidth*(d.type=='course'))
+    .attr('x2',d => d.x)
+    .attr('y1',d => d.y-d.height/2)
+    .attr('y2',d => d.y+d.height/2)
+    .attr('stroke','maroon')
+    .attr('stroke-width',2)
+  _groups.exit().remove()
+  var boxes = g.graph().columns.filter(col => col.groups).reduce((arr,col) => (col.groups.forEach(group => group.forEach(box => {
+    arr.push({
+      y:box.reduce((sum,n) => sum+g.node(n).y,0)/box.length,
+      height:box.reduce((sum,n) => sum+g.node(n).height,box.length*g.graph().nodesep),
+      x:col.x,
+      type:col.type,
+    })
+  })),arr),[])
+  var _boxes = $debug2.selectAll('line')
+    .data(boxes)
+  _boxes.enter().append('line')
+    .merge(_boxes)
+    .attr('x1',d => d.x-g.graph().nwidth*(d.type=='course'))
+    .attr('x2',d => d.x)
+    .attr('y1',d => d.y+d.height/2)
+    .attr('y2',d => d.y-d.height/2)
+    .attr('stroke','#f442e8')
+    .attr('stroke-width',2)
+  _boxes.exit().remove()
 }
 
 function routesrender(g,r){
@@ -199,14 +243,3 @@ function routesrender(g,r){
     .attr('width',g.graph().width)
     .attr('height',g.graph().height)
 }
-
-/* Debugging for 'fixLeafNodes' */
-// svg.append('g').selectAll('rect')
-//   .data(Object.entries(columnSpaces).reduce((arr,[col,spaces]) => arr.concat(spaces.map(n => (n.x=g.graph().columns[col].x,n))),[]))
-//   .enter().append('line')
-//   .attr('x1',d => d.x)
-//   .attr('x2',d => d.x)
-//   .attr('y1',d => d.from)
-//   .attr('y2',d => d.to)
-//   .attr('stroke','maroon')
-//   .attr('stroke-width',10)

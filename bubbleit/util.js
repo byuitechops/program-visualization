@@ -29,7 +29,7 @@ function weightedMean(g,n,nodes){
   var sum=0,totalweight=0
   nodes.forEach(m => {
     // 1/(num of columns the parent is away)
-    var weight = 1/distLevels(g,g.node(n).level,g.node(m).level)
+    var weight = 1//1/Math.abs(g.node(n).x-g.node(m).x)
     sum += g.node(m).y * weight
     totalweight += weight
   })
@@ -39,7 +39,4 @@ function weightedMean(g,n,nodes){
 function compareLevels(a,b,fn){
   // if they are not on the same course column, compare course column, other wise logic column
   return a[0] != b[0] ? fn(a[0],b[0]) : fn(a[1],b[1])
-}
-function distLevels(g,a,b){
-  return Math.abs(a[0]-b[0]) + Math.abs(a[1]-b[1])*.1
 }
