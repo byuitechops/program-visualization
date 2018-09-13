@@ -278,10 +278,11 @@ function initialPositions(g){
 }
 
 function* order(g){
+  window.boxes = []
   const hasCollision = (a,b) => a.y-a.height/2 < b.y+b.height/2 && a.y+a.height/2 > b.y-b.height/2
   const breaksize = 6
   function calcPosition(group){
-    var height = (group.length-1) * (g.graph().nheight+g.graph().nodesep)
+    var height = group.length * (g.graph().nheight+g.graph().nodesep)
     var sum = 0, count = 0
     group.forEach(box => {
       height += box.length * g.graph().nodesep
@@ -297,6 +298,8 @@ function* order(g){
     group.height = height
     // Set Y to 
     group.y = sum/count
+    // Find how many breaks it needs
+    group.numbreaks = Math.floor(count/breaksize)
   }
   function mergeGroups(groups,group){
     groups.forEach(otherGroup => {
@@ -306,10 +309,13 @@ function* order(g){
           // node is not allowed to be in the same box as another node who was in the same group but different box
           // because they have already been seperated, so keep them sepereated
           // console.log(n,node.group,node.box)
-          // group[k].filter(n => g.node(n).group).forEach(n => console.log(n,g.node(n).group == node.group,g.node(n).box != node.box))
-          while(node.group && group.box && group[k].filter(n => g.node(n).group).some(n => g.node(n).group == node.group && g.node(n).box != node.box)){
-            ++k
-            group[k] = group[k] || []
+          if(round){
+            while(group[k].filter(n => g.node(n).group).some(n => /* g.node(n).group == node.group &&  */g.node(n).box != node.box)){
+              // console.log(g.node(n).group)
+              // group[k].filter(n => g.node(n).group).forEach(n => console.log(n,g.node(n).group == node.group,g.node(n).box == node.box))
+              ++k
+              group[k] = group[k] || []
+            }
           }
           group[k].push(n)
         })
@@ -318,6 +324,7 @@ function* order(g){
   }
   
   for(var round = 0; round < 100; round++){
+    window.boxes = []
     var nodes = []
     // TODO: There is probably be a good heuristic order in 
     // which to sort the nodes by (least amount of connections 
@@ -333,7 +340,8 @@ function* order(g){
         var position = {
           y: node.y,
           // add the padding
-          height: node.height + g.graph().nodesep
+          height: node.height + g.graph().nodesep,
+          numbreaks:0,
         }
         var group = Object.assign([Object.assign([n],position)],position)
 
@@ -360,42 +368,45 @@ function* order(g){
 
         nodes.push(n)
         col.groups = groups
+        // if(round) yield nodes
         // yield nodes
       }
       /* Position nodes within groups according to where they want to be */
-      groups.forEach(group => {
-        var y = group.y - group.height/2// + g.graph().nodesep/2
-
-        group.forEach(box => {
-          var nodes = box.map(n => {
+      groups.forEach((group,gi) => {
+        var nodes = group.reduce((arr,box) => {
+          box.forEach(n => {
             var pull = g.neighbors(n).reduce((sum,n) => sum+(g.node(n).y-group.y),0)
-            return {n,pull}
-          }).sort((a,b) => a.pull-b.pull).map(n => n.n)
-          
-          var breaks = nodes.slice(0,-1)
-            .map((n,i) => {
-              var dist = g.node(nodes[i+1]).y - g.node(n).y
-              return {n,dist}
-            })
-            .sort((a,b) => b.dist-a.dist)
-            .slice(0,group.numbreaks)
-            .reduce((obj,{n}) => (obj[n] = true,obj),{})
+            arr.push({n,pull})
+          })
+          return arr
+        },[]).sort((a,b) => a.pull-b.pull).map(n => n.n)
+        
+        var breaks = nodes.slice(0,-1)
+          .map((n,i) => {
+            var dist = g.node(nodes[i+1]).y - g.node(n).y
+            return {n,dist}
+          })
+          .sort((a,b) => b.dist-a.dist)
+          .slice(0,group.numbreaks)
+          .reduce((obj,{n}) => (obj[n] = true,obj),{})
 
-          // Create new grouping to be referenced during the next run
-          var k = 0
-          var boxes = nodes.reduce((boxes,n) => {
-            g.node(n).box = boxes[k]
-            g.node(n).group = boxes
-            boxes[k].push(n)
-            if(breaks[n]){
-              boxes.push([])
-              k++
-            }
-            return boxes
-          },[[]])
+        // Create new grouping to be referenced during the next run
+        var k = 0
+        var boxes = nodes.reduce((boxes,n) => {
+          g.node(n).box = boxes[k]
+          g.node(n).group = boxes
+          boxes[k].push(n)
+          if(breaks[n]){
+            boxes.push([])
+            k++
+          }
+          return boxes
+        },[[]])
 
-          // Object.keys(breaks).length && console.log(breaks)
-          
+        // Object.keys(breaks).length && console.log('breaks',breaks)
+        
+        var y = group.y - group.height/2// + g.graph().nodesep/2
+        boxes.forEach(box => {
           box.forEach(n => {
             y += g.node(n).height/2
             g.node(n).y = y
@@ -404,19 +415,12 @@ function* order(g){
           })
           y += g.graph().nheight + g.graph().nodesep
         })
+        window.boxes.push((props => Object.assign(boxes.map(box => Object.assign(box,props)),props))({x:col.x,type:col.type}))
       })
     }
     var max = Math.max(...g.nodes().map(n => g.node(n).y+g.node(n).height/2))
     var min = Math.min(...g.nodes().map(n => g.node(n).y-g.node(n).height/2))
-    // svg.attr('viewport',[
-    //   // 0,
-    //   // min,
-    //   // g.graph().width,
-    //   // max,
-    //   0,0,100,100
-    // ].join(' '))
-    // g.nodes().forEach(n => g.node(n).y += 0-min)
-    // g.graph().columns.filter(col => col.groups).forEach(col => col.groups.forEach(group => group.y += 0-min))
+    g.nodes().forEach(n => g.node(n).y += 0-min)
     g.graph().height = max-min
     yield
   }

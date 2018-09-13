@@ -187,37 +187,40 @@ function render(g,nodes){
     .attr('height',g.graph().height+g.graph().nodesep)
 
   /* Debugging for ordering algorithm */
-  var groups = [].concat(...g.graph().columns.filter(col => col.groups).map(col => col.groups.map(group => (group.x=col.x,group.type=col.type,group))))
-  var _groups = $debug1.selectAll('line')
-    .data(groups)
-  _groups.enter().append('line')
-    .merge(_groups)
-    .attr('x1',d => d.x-g.graph().nwidth*(d.type=='course'))
-    .attr('x2',d => d.x)
-    .attr('y1',d => d.y-d.height/2)
-    .attr('y2',d => d.y+d.height/2)
-    .attr('stroke','maroon')
-    .attr('stroke-width',2)
-  _groups.exit().remove()
-  var boxes = g.graph().columns.filter(col => col.groups).reduce((arr,col) => (col.groups.forEach(group => group.forEach(box => {
-    arr.push({
-      y:box.reduce((sum,n) => sum+g.node(n).y,0)/box.length,
-      height:box.reduce((sum,n) => sum+g.node(n).height,box.length*g.graph().nodesep),
-      x:col.x,
-      type:col.type,
-    })
-  })),arr),[])
   var _boxes = $debug2.selectAll('line')
-    .data(boxes)
+    .data([].concat(...window.boxes).filter(n => n))
   _boxes.enter().append('line')
     .merge(_boxes)
     .attr('x1',d => d.x-g.graph().nwidth*(d.type=='course'))
     .attr('x2',d => d.x)
-    .attr('y1',d => d.y+d.height/2)
-    .attr('y2',d => d.y-d.height/2)
+    .attr('y1',d => d.y1 = Math.min(...d.map(n => g.node(n).y-g.node(n).height/2)))
+    .attr('y2',d => d.y2 = Math.max(...d.map(n => g.node(n).y+g.node(n).height/2)))
     .attr('stroke','#f442e8')
     .attr('stroke-width',2)
   _boxes.exit().remove()
+  // var groups = [].concat(...g.graph().columns.filter(col => col.groups).map(col => col.groups.map(group => (group.x=col.x,group.type=col.type,group))))
+  var _groups = $debug1.selectAll('line')
+    .data(window.boxes.filter(n => n))
+  _groups.enter().append('line')
+    .merge(_groups)
+    .attr('x1',d => d.x)
+    .attr('x2',d => d.x-g.graph().nwidth*(d.type=='course'))
+    .attr('y1',d => Math.min(...d.map(n => n.y1)))
+    .attr('y2',d => Math.max(...d.map(n => n.y2)))
+    // .attr('y1',d => d.y-d.height/2)
+    // .attr('y2',d => d.y+d.height/2)
+    .attr('stroke','maroon')
+    .attr('stroke-width',2)
+  _groups.exit().remove()
+  // var boxes = g.graph().columns.filter(col => col.groups).reduce((arr,col) => (col.groups.forEach(group => group.forEach(box => {
+  //   arr.push({
+  //     y:box.reduce((sum,n) => sum+g.node(n).y,0)/box.length,
+  //     height:box.reduce((sum,n) => sum+g.node(n).height,box.length*g.graph().nodesep),
+  //     x:col.x,
+  //     type:col.type,
+  //   })
+  // })),arr),[])
+
 }
 
 function routesrender(g,r){
