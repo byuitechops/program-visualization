@@ -4,8 +4,7 @@ const $edges = svg.append('g').classed('edges',true)
 const $highlight = svg.append('g').classed('highlighter',true)
 const $nodes = svg.append('g').classed('nodes',true)
 const $groups = svg.append('g').classed('groups',true)
-const $debug1 = svg.append('g').classed('debug1',true)
-const $debug2 = svg.append('g').classed('debug2',true)
+const $debug = svg.append('g').classed('debug',true)
 const useTemporaryLines = true
 
 const g = graphlib.json.read(reqTree)
@@ -106,6 +105,7 @@ function updateStates(g){
 }
 
 function render(g,nodes){
+  const isCourse = (n,node) => (node=n.type?n:g.node(n),node.type=='course'||node.type=='group')
   g.nodes().forEach(n => (g.node(n).y=g.node(n).y||0,g.node(n).x=g.node(n).x||0))
   nodes = nodes || g.nodes().filter(n => g.node(n).type!='group')
   // Create Joined Data selections
@@ -123,7 +123,7 @@ function render(g,nodes){
     .on('mouseover',n => highlight(n,true))
     .on('mouseout',n =>  highlight(n,false))
     .on('click',n => g.node(n).enabled && (g.node(n).active = !g.node(n).active,updateStates(g,n)))
-  var courseNodes = enteringNodes.filter(n => g.node(n).type=='course' || g.node(n).type=='group')
+  var courseNodes = enteringNodes.filter(isCourse)
   courseNodes.append('rect')
     .attr('width',n => g.node(n).width)
     .attr('height',n => g.node(n).height)
@@ -141,8 +141,7 @@ function render(g,nodes){
   enteringNodes.filter(n => g.node(n).type!='course'&&g.node(n).type!='group').append('circle')
   function transform(n){
     var node = g.node(n)
-    var isCourse = node.type != 'logic'
-    return `translate(${[node.x-(node.width*isCourse),node.y-(node.height/2*isCourse)]})`
+    return `translate(${[node.x-(node.width*isCourse(n)),node.y-(node.height/2*isCourse(n))]})`
   }
   enteringNodes.merge(_nodes)
     .attr('transform',transform)
@@ -187,40 +186,17 @@ function render(g,nodes){
     .attr('height',g.graph().height+g.graph().nodesep)
 
   /* Debugging for ordering algorithm */
-  var _boxes = $debug2.selectAll('line')
+  var _boxes = $debug.selectAll('line')
     .data([].concat(...window.boxes).filter(n => n))
   _boxes.enter().append('line')
     .merge(_boxes)
-    .attr('x1',d => d.x-g.graph().nwidth*(d.type=='course'))
+    .attr('x1',d => d.x-g.graph().nwidth*isCourse(d))
     .attr('x2',d => d.x)
-    .attr('y1',d => d.y1 = Math.min(...d.map(n => g.node(n).y-g.node(n).height/2)))
-    .attr('y2',d => d.y2 = Math.max(...d.map(n => g.node(n).y+g.node(n).height/2)))
-    .attr('stroke','#f442e8')
-    .attr('stroke-width',2)
-  _boxes.exit().remove()
-  // var groups = [].concat(...g.graph().columns.filter(col => col.groups).map(col => col.groups.map(group => (group.x=col.x,group.type=col.type,group))))
-  var _groups = $debug1.selectAll('line')
-    .data(window.boxes.filter(n => n))
-  _groups.enter().append('line')
-    .merge(_groups)
-    .attr('x1',d => d.x)
-    .attr('x2',d => d.x-g.graph().nwidth*(d.type=='course'))
-    .attr('y1',d => Math.min(...d.map(n => n.y1)))
-    .attr('y2',d => Math.max(...d.map(n => n.y2)))
-    // .attr('y1',d => d.y-d.height/2)
-    // .attr('y2',d => d.y+d.height/2)
+    .attr('y1',d => d.y-d.height/2)
+    .attr('y2',d => d.y+d.height/2)
     .attr('stroke','maroon')
     .attr('stroke-width',2)
-  _groups.exit().remove()
-  // var boxes = g.graph().columns.filter(col => col.groups).reduce((arr,col) => (col.groups.forEach(group => group.forEach(box => {
-  //   arr.push({
-  //     y:box.reduce((sum,n) => sum+g.node(n).y,0)/box.length,
-  //     height:box.reduce((sum,n) => sum+g.node(n).height,box.length*g.graph().nodesep),
-  //     x:col.x,
-  //     type:col.type,
-  //   })
-  // })),arr),[])
-
+  _boxes.exit().remove()
 }
 
 function routesrender(g,r){

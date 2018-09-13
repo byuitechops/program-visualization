@@ -1,4 +1,3 @@
-const dir = n => n/Math.abs(n)||0
 let DEBUG = false
 // Just for debugging, please take out for production
 Object.defineProperty(Array.prototype,'$',{

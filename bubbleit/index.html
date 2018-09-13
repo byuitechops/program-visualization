@@ -57,13 +57,17 @@
         stroke:#267F6F;
       }
       
-      /* Display AND nodes */
-      /* .nodes g[data-type="AND"] circle { */
+      /* AND nodes */
       .nodes g circle {
         fill:white;
         stroke:#CC258F;
         stroke-width:2px;
         r:2;
+      }
+
+      /* Bridge nodes */
+      .nodes g[data-type="bridge"] circle {
+        stroke:#007876;
       }
 
       .routes line{
