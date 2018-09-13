@@ -4,9 +4,10 @@ const $edges = svg.append('g').classed('edges',true)
 const $highlight = svg.append('g').classed('highlighter',true)
 const $nodes = svg.append('g').classed('nodes',true)
 const $groups = svg.append('g').classed('groups',true)
+const $key = d3.select('body').append('div').classed('key',true)
 
 // Create the input graph
-const g = dagre.graphlib.json.read(reqTree)
+const g = dagre.graphlib.json.read(window._reqTree)
   .setGraph({
     rankdir:'LR',
     nodesep:3,
@@ -32,8 +33,8 @@ g.removeNode('[]+')
 g.removeNode('[]*')
 
 const color = (() => {
-  var i = 0, colors = g.nodes().reduce((obj,n) => (g.node(n).program!=undefined && (obj[g.node(n).program] = obj[g.node(n).program] || i++),obj),{})
-  return n => colors[n]!=undefined ? d3.interpolateRainbow(colors[n]/(i-1)) : '#999'
+  var colors = window._subprograms.reduce((obj,name,i) => (obj[name] = i,obj),{})
+  return n => colors[n]!=undefined ? d3.interpolateRainbow(colors[n]/(window._subprograms.length)) : '#999'
 })()
 const r = layout.time(g)
 // render(clone)
@@ -112,27 +113,52 @@ function render(g){
     .classed('disabled',n => g.predecessors(n).length)
     .on('mouseover',n => highlight(n,true))
     .on('mouseout',n =>  highlight(n,false))
-    .on('click',n => g.node(n).enabled && (g.node(n).active = !g.node(n).active,updateStates(g,n)))
+    .on('click',function(n){
+      if(g.node(n).enabled){
+        var node = g.node(n)
+        var _node = d3.select(this).select('rect')
+        if(node.active){ 
+          // toggle through possible states setting to false if no other states
+          var fill = _node.attr('fill')
+          var index = node.programs.findIndex(program => fill == color(program))
+          if(node.programs[index+1]){
+            _node.attr('fill',color(node.programs[index+1]))
+          } else {
+            _node.attr('fill',color(node.programs[0]))
+            node.active = false
+          }
+        } else {
+          node.active = true
+        }
+        updateStates(g,n)
+      }
+    })
   var courseNodes = enteringNodes.filter(n => g.node(n).type=='course' || g.node(n).type=='group')
   courseNodes.append('rect')
     .attr('width',n => g.node(n).width)
     .attr('height',n => g.node(n).height)
-    .attr('fill',n => color(g.node(n).program))
+    .attr('fill',n => color(g.node(n).programs[0]))
   courseNodes.append('text')
     .attr('x',n => g.node(n).width/2)
     .attr('y',n => g.node(n).height/2)
     .text(n => g.node(n).type=='course'?n:'')
-  courseNodes.append('line')
-    .attr('x1',0)
-    .attr('y1',n => g.node(n).height-1.5)
-    .attr('x2',n => g.node(n).width)
-    .attr('y2',n => g.node(n).height-1.5)
-    .attr('stroke',n => color(g.node(n).program))
   enteringNodes.filter(n => g.node(n).type!='course'&&g.node(n).type!='group').append('circle')
   enteringNodes.merge(_nodes)
     .attr('transform',n => {
       var node = g.node(n)
       return `translate(${[node.x-(node.width||0),node.y-(node.height||0)/2]})`
+    })
+    .each(function(n){
+      if(g.node(n).type == 'course'){
+        var _programs = d3.select(this).selectAll('line').data(g.node(n).programs)
+        _programs.enter().append('line').merge(_programs)
+          .attr('y1',() => g.node(n).height-1.5)
+          .attr('y2',() => g.node(n).height-1.5)
+          .attr('x1',(d,i,a) => g.node(n).width*i/a.length)
+          .attr('x2',(d,i,a) => g.node(n).width*(i+1)/a.length)
+          .attr('stroke',d => color(d))
+        _programs.exit().remove()
+      }
     })
   _nodes.exit().remove()
 
@@ -166,9 +192,15 @@ function render(g){
     .attr('height',n => g.node(n).height+thickness)
   _groups.exit().remove()
 
+  var _keys = $key.selectAll('div').data(window._subprograms)
+    .enter().append('div')
+      .style('background-color',(d,i) => color(window._subprograms[i]))
+      .text(d => d)
+  
   svg
     .attr('width',g.graph().width)
     .attr('height',g.graph().height+g.graph().nodesep)
+
 }
 
 function routesrender(g,r){
@@ -194,7 +226,6 @@ function routesrender(g,r){
     .attr('width',g.graph().width)
     .attr('height',g.graph().height)
 }
-
 /* Debugging for 'fixLeafNodes' */
 // svg.append('g').selectAll('rect')
 //   .data(Object.entries(spaces).reduce((arr,[x,spaces]) => arr.concat(spaces.map(n => (n.x=x,n))),[]))

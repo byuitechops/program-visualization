@@ -69,3 +69,17 @@ text {
   stroke-width:1;
   stroke-opacity: .2;
 }
+
+/* Key */
+.key {
+  display:inline-block;
+  position:fixed;
+  right:0;
+  bottom:0;
+  font-weight: 300;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serf;
+  font-size: 14px;
+}
+.key div {
+  padding:4px 10px;
+}
