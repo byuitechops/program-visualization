@@ -196,20 +196,20 @@ function ranking(g){
   })
 
   // Add in the extra logic columns
-  for(var c = 0; c < grid.length; c++){
-    // this will make the last column of the grid a 'logic' column, 
-    // but that's okay because of the rare case of a course in the 
-    // last column needing to cycle back to a previous node
+  // for(var c = 0; c < grid.length; c++){
+  //   // this will make the last column of the grid a 'logic' column, 
+  //   // but that's okay because of the rare case of a course in the 
+  //   // last column needing to cycle back to a previous node
 
-    // don't add one for first column, unless there are logic nodes first 
-    if(grid[c][0].type != 'root' || grid[c].length != 1){
-      grid[c].push({
-        type:'logic',
-        rank:[c,grid[c].length],
-        nodes:[],
-      })
-    }
-  }
+  //   // don't add one for first column, unless there are logic nodes first 
+  //   if(grid[c][0].type != 'root' || grid[c].length != 1){
+  //     grid[c].push({
+  //       type:'logic',
+  //       rank:[c,grid[c].length],
+  //       nodes:[],
+  //     })
+  //   }
+  // }
 
   g.graph().getColumn = function(c,l){
     // saving the grid in this function
@@ -421,7 +421,7 @@ function* layout(g){
   createGroups.time(g)
   fixCycles.time(g)
   ranking.time(g)
-  createBridgeNodes.time(g)
+  // createBridgeNodes.time(g)
   initialPositions.time(g)
   yield * order.time(g)
 } 

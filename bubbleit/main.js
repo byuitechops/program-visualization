@@ -13,7 +13,7 @@ const g = graphlib.json.read(reqTree)
     nheight:20,
     nodesep:3,
     // marginx:50,
-    layersep:useTemporaryLines ? 10 : 5,
+    layersep:useTemporaryLines ? 20 : 5,
     lanesep:3,
     andsep:1.5,
     height:window.innerHeight,
@@ -186,17 +186,17 @@ function render(g,nodes){
     .attr('height',g.graph().height+g.graph().nodesep)
 
   /* Debugging for ordering algorithm */
-  var _boxes = $debug.selectAll('line')
-    .data([].concat(...window.boxes).filter(n => n))
-  _boxes.enter().append('line')
-    .merge(_boxes)
-    .attr('x1',d => d.x-g.graph().nwidth*isCourse(d))
-    .attr('x2',d => d.x)
-    .attr('y1',d => d.y-d.height/2)
-    .attr('y2',d => d.y+d.height/2)
-    .attr('stroke','maroon')
-    .attr('stroke-width',2)
-  _boxes.exit().remove()
+  // var _boxes = $debug.selectAll('line')
+  //   .data([].concat(...window.boxes).filter(n => n))
+  // _boxes.enter().append('line')
+  //   .merge(_boxes)
+  //   .attr('x1',d => d.x-g.graph().nwidth*isCourse(d))
+  //   .attr('x2',d => d.x)
+  //   .attr('y1',d => d.y-d.height/2)
+  //   .attr('y2',d => d.y+d.height/2)
+  //   .attr('stroke','maroon')
+  //   .attr('stroke-width',2)
+  // _boxes.exit().remove()
 }
 
 function routesrender(g,r){
