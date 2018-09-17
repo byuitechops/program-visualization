@@ -40,8 +40,10 @@ const color = colorfn(g)
   }
   render(g)
 })()}
-// routesrender(g,r)
+// layout.time(g)
+// render(g)
 // updateStates(g)
+// routesrender(g,r)
 
 function colorfn(g){
   var i = 0, colors = g.nodes().reduce((obj,n) => (g.node(n).program!=undefined && (obj[g.node(n).program] = obj[g.node(n).program] || i++),obj),{})
@@ -59,7 +61,7 @@ function predecessors(g,n,collection=[],first=true){
 
 function successors(g,n,collection=[],first=true){
   collection.push(`[data-id="${n}"]`)
-  if(first || (g.node(n).type != 'course' && g.node(n).op != 'AND')){
+  if(first || (g.node(n).type != 'course'/*  && g.node(n).op != 'AND' */)){
     collection.push(...g.outEdges(n).map(e => `[data-source="${e.v}"][data-target="${e.w}"]`))
     g.successors(n).map(n => successors(g,n,collection,false))
   }
@@ -118,7 +120,7 @@ function render(g,nodes){
 
   // Update elements with the new calculations
   var enteringNodes = _nodes.enter().append('g')
-    .attr('id',n => n)
+    .attr('data-id',n => n)
     .attr('data-type',n => g.node(n).op || g.node(n).type)
     .on('mouseover',n => highlight(n,true))
     .on('mouseout',n =>  highlight(n,false))
@@ -170,7 +172,7 @@ function render(g,nodes){
 
   var thickness = 1.5
   _groups.enter().append('rect')
-    .attr('id',n => n)
+    .attr('data-id',n => n)
     .attr('data-type',n => g.node(n).type)
     .attr('data-grouptype',n => g.node(n).grouptype)
     .attr('stroke-width',thickness)

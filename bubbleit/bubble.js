@@ -152,7 +152,7 @@ function rankNode(g,grid,n){
     // Find which parent is the farthest forward
     var parent = parents.reduce((farthest,node) => {
       return compareLevels(node.rank,farthest.rank,greaterThan) ? node : farthest
-    },grid[0][0])
+    },{rank:[0,0]})
 
     // Add this node to the column after our furthest parent
     // minor step if a logic, major step if a course
@@ -170,7 +170,6 @@ function rankNode(g,grid,n){
       grid[node.rank[0]] = grid[node.rank[0]] || []
       col = grid[node.rank[0]][node.rank[1]] = {
         type:node.type,
-        rank:node.rank,
         nodes:[],
       }
     }
@@ -188,84 +187,50 @@ function rankNode(g,grid,n){
 }
 
 function ranking(g){
-  var grid = [[{rank:[0,0],type:'root'}]]
-
   // for each component in our graph get the recursive rank function running
-  graphlib.alg.components(g).forEach(component => {
+  var grid = [[{rank:[0,0],type:'root'}]]
+  var components = graphlib.alg.components(g).sort((a,b) => b.length-a.length)
+  components.forEach((component) => {
     rankNode(g,grid,component[0])
   })
 
-  // Add in the extra logic columns
-  // for(var c = 0; c < grid.length; c++){
-  //   // this will make the last column of the grid a 'logic' column, 
-  //   // but that's okay because of the rare case of a course in the 
-  //   // last column needing to cycle back to a previous node
-
-  //   // don't add one for first column, unless there are logic nodes first 
-  //   if(grid[c][0].type != 'root' || grid[c].length != 1){
-  //     grid[c].push({
-  //       type:'logic',
-  //       rank:[c,grid[c].length],
-  //       nodes:[],
-  //     })
-  //   }
-  // }
-
-  g.graph().getColumn = function(c,l){
-    // saving the grid in this function
-    // grid won't be accesable otherwise
-    if(Array.isArray(c)) l = c[1], c = c[0]
-    if(l == undefined) l = 0
-    return grid[c] && grid[c][l]
-  }
-
   g.graph().columns = []
-  for(var c = 0; c < grid.length; c++){
+  for(var c = 0,ci=0; c < grid.length; c++){
     for(var l = 0; l < grid[c].length; l++){
       if(grid[c][l].type != 'root'){
+        grid[c][l].ci = ci
+        grid[c][l].grids = []
+        grid[c][l].nodes.forEach(n => g.node(n).ci = ci)
         g.graph().columns.push(grid[c][l])
+        ci++
       }
     }
   }
+  
+  g.graph().grids = components.map(() => ({nodes:[],columns:[]}))
+  components.forEach((component,gi) => {
+    component.sort().forEach(n => {
+      if(!g.parent(n)){
+        g.graph().grids[gi].nodes.push(n)
 
-  g.graph().columns.forEach((col,ci) => {
-    col.ci = ci
-    col.nodes.forEach(n => g.node(n).ci = ci)
-  })
-}
-
-/**
- * Create Bridge Nodes
- * -------------------
- * 
- */
-function createBridgeNodes(g){
-  g.edges().forEach(e => {
-    // stay compatible with backwards linked nodes (which shouldn't exit but just in case)
-    var [v,w] = [e.v,e.w].sort((a,b) => g.node(a).ci-g.node(b).ci)
-    var last = v
-    for(var ci = g.node(v).ci+1; ci < g.node(w).ci; ci++){
-      if(g.graph().columns[ci].rank[1] == 0){
-        // console.log(g.node(v).ci,ci)
-        var name = v+Array(ci-g.node(v).ci+1).join('>')+w
-        g.setNode(name,{
-          type:'bridge',
-          rank:g.graph().columns[ci].rank,
-          ci:ci,
-          width:0,
-          height:g.graph().nheight,
-        })
-        // console.log(last,name)
-        g.setEdge(last,name,Object.assign({old:e},g.edge(e)))
-        g.graph().columns[ci].nodes.push(name)
-        last = name
+        let ci = g.node(n).ci
+        if(g.graph().columns[ci].grids[gi] == undefined){
+          g.graph().columns[ci].grids[gi] = {
+            nodes:[],
+            get(){return g.graph().grids[gi]}
+          }
+        }
+        g.graph().columns[ci].grids[gi].nodes.push(n)
+        
+        if(g.graph().grids[gi].columns[ci] == undefined){
+          g.graph().grids[gi].columns[ci] = {
+            nodes:[],
+            get(){return g.graph().columns[ci]}
+          }
+        }
+        g.graph().grids[gi].columns[ci].nodes.push(n)
       }
-    }
-    if(last != v){
-      // console.log(last,w)
-      g.setEdge(last,w,Object.assign({old:e},g.edge(e)))
-      g.removeEdge(v,w)
-    }
+    })
   })
 }
 
@@ -281,40 +246,46 @@ function createBridgeNodes(g){
  * be next to (same department)
  */
 function initialPositions(g){
-  var x = g.graph().marginx||0
-  var maxheight = 0
-  // Find the tallest column, so that we can vertically center all of the columns
-  g.graph().columns.forEach(col => {
-    col.height = col.nodes.reduce((sum,n) => sum+g.node(n).height,0)
-    maxheight = Math.max(maxheight,col.height + (col.nodes.length-1)*g.graph().nodesep)
-  })
-  // maxheight = maxheight * 1.3
-  g.graph().columns.forEach((col,ci) => {
-    var y = g.graph().marginy||0// + (maxheight-col.height)/2
-    // padding between layers
-    x += g.graph().layersep
-    // account for node width (shouldn't vary between nodes)
-    if(col.type == 'course') x += g.graph().nwidth
-    /* debugging */col.x = x
-    // set the node coordinates
-    col.nodes.sort().forEach((n,i) => {
-      g.node(n).x = x
-      // account for spacing between nodes
-      if(i != 0) y += (maxheight-col.height)/(col.nodes.length-1)
-      // padded by node height
-      y += g.node(n).height/2
-      g.node(n).y = y
-      y += g.node(n).height/2
+  const spacing = g.graph().nodesep
+  /* Calculate the height of each grid and column */
+  g.graph().grids.forEach(grid => {
+    grid.height = 0
+    grid.columns.forEach(col => {
+      col.height = 0
+      col.nodes.forEach((n,ni) => col.height += g.node(n).height + !!ni*spacing)
+      grid.height = Math.max(grid.height,col.height)
     })
   })
+
+  /* Position the nodes */
+  var x = g.graph().marginx||0
+  g.graph().columns.forEach((col,ci) => {
+    x += (col.type=='course')*g.graph().nwidth + !!ci*g.graph().layersep
+    col.x = x
+    col.grids.forEach(grid => {
+      var y = 0
+      grid.nodes.forEach((n,ni) => {
+        /* Justify nodes horizontal position across grid height */
+        if(grid.nodes.length == 1){
+          y += (grid.get().height- g.node(n).height)/2
+        } else if(ni){
+          y += (grid.get().height-grid.get().columns[ci].height)/(grid.nodes.length-1)
+        }
+        y += g.node(n).height/2 + !!ni * spacing
+        g.node(n).y = y
+        y += g.node(n).height/2
+        g.node(n).x = col.x
+      })
+    })
+  })
+  
+  /* Progapate coordinates down to children */
   g.graph().groups.forEach(p => {
     g.children(p).forEach(n => {
       g.node(n).x = g.node(p).x
       g.node(n).y = g.node(p).y
     })
   })
-  g.graph().width = x + (g.graph().marginx||0)
-  g.graph().height = maxheight + (g.graph().marginy||0)
 }
 
 function* order(g){
@@ -331,89 +302,95 @@ function* order(g){
     return this.y = sum/totalweight
   }
   function calcPull(y){ return this.pull = this.influences.reduce((sum,node) => sum+(node.y-y),0) }
-  const boxes = g.graph().columns.map(col => col.nodes.map(n => ({
+  const boxes = g.graph().grids.map(grid => Array.from(grid.columns).filter(n => n).map(col => col.nodes.map(n => ({
     id:n,
     node:g.node(n),
     influences:g.neighbors(n).map(n => g.node(n)),
     calcPull,
     calcY,
-  })))
-  for(var round = 0; round < 100; round++){
+  }))))
+  for(var round = 0; round < 20; round++){
     /* debugging */var nodes = []
     // TODO: There is probably be a good heuristic order in 
     // which to sort the nodes by (least amount of connections 
     // to greatest or something)
-    for(var ci = 0; ci < boxes.length; ci++){
-      var col = g.graph().columns[ci]
-      var bubbles = []
-      for(var bi = 0; bi < boxes[ci].length; bi++){
-        var box = boxes[ci][bi]
+    for(var gi = 0; gi < boxes.length; gi++){ // for each grid
+      for(var ci = 0; ci < boxes[gi].length; ci++){ // for each column
+        var col = g.graph().columns[ci]
+        var bubbles = []
+        for(var bi = 0; bi < boxes[gi][ci].length; bi++){ // for each node
+          var box = boxes[gi][ci][bi]
 
-        /* Calculate where this box now wants to be */
-        box.calcY()
+          /* Calculate where this box now wants to be */
+          box.calcY()
 
-        var currentbubble = Object.assign([box],{
-          height:box.node.height+g.graph().nodesep,
-          y:box.y
-        })
-        /* debugging */box.node.y = currentbubble.y
-
-        /* While we keep running into other groups */
-        var done = false
-        while(!done){
-          /* Seperate bubbles that have collisions from those that don't */
-          var collisions = [], other = []
-          bubbles.forEach(bubble => hasCollision(bubble,currentbubble) ? collisions.push(bubble) : other.push(bubble))
-          bubbles = other
-
-          /* If no collisions exit the loop */
-          if(collisions.length == 0){ 
-            done = true
-            continue
-          }
-
-          /* Merge collisions into one group */
-          collisions.forEach(bubble => {
-            currentbubble.push(...bubble)
+          var currentbubble = Object.assign([box],{
+            height:box.node.height+g.graph().nodesep,
+            y:box.y
           })
+          /* debugging */box.node.y = currentbubble.y
 
-          /* Set currentbubble.y to the mean of boxes .y */
-          currentbubble.y = currentbubble.reduce((sum,box) => sum+box.y,0)/currentbubble.length
+          /* While we keep running into other groups */
+          var done = false
+          while(!done){
+            /* Seperate bubbles that have collisions from those that don't */
+            var collisions = [], other = []
+            bubbles.forEach(bubble => hasCollision(bubble,currentbubble) ? collisions.push(bubble) : other.push(bubble))
+            bubbles = other
 
-          /* Sort currentbubble's nodes based on the pull of their influences */
-          currentbubble.forEach(box => box.calcPull(currentbubble.y))
-          currentbubble.sort((a,b) => a.pull-b.pull)
-
-          /* Set currentbubble.height to sum of boxes.height plus nodesep */
-          currentbubble.height = currentbubble.reduce((sum,box,i) => {
-            if(!(box.node.type == 'bridge' && i && currentbubble[i-1].node.type=='bridge')){
-              sum += box.node.height+g.graph().nodesep
+            /* If no collisions exit the loop */
+            if(collisions.length == 0){ 
+              done = true
+              continue
             }
-            return sum
-          },0)
+
+            /* Merge collisions into one group */
+            collisions.forEach(bubble => {
+              currentbubble.push(...bubble)
+            })
+
+            /* Set currentbubble.y to the mean of boxes .y */
+            currentbubble.y = currentbubble.reduce((sum,box) => sum+box.y,0)/currentbubble.length
+
+            /* Sort currentbubble's nodes based on the pull of their influences */
+            currentbubble.forEach(box => box.calcPull(currentbubble.y))
+            currentbubble.sort((a,b) => a.pull-b.pull)
+
+            /* Set currentbubble.height to sum of boxes.height plus nodesep */
+            currentbubble.height = currentbubble.reduce((sum,box,i) => {
+              if(!(box.node.type == 'bridge' && i && currentbubble[i-1].node.type=='bridge')){
+                sum += box.node.height+g.graph().nodesep
+              }
+              return sum
+            },0)
+          }
+          bubbles.push(currentbubble)
+          currentbubble.x = col.x, currentbubble.type = col.type, window.boxes[ci] = bubbles
+          // nodes.push(box.id), yield nodes
         }
-        bubbles.push(currentbubble)
-        currentbubble.x = col.x, currentbubble.type = col.type, window.boxes[ci] = bubbles
-        // nodes.push(box.id), yield nodes
-      }
-      /* Set the node's new position */
-      bubbles.forEach(bubble => {
-        var y = bubble.y - bubble.height/2
-        bubble.forEach((box,i) => {
-          var skip = box.node.type == 'bridge' && i && bubble[i-1].node.type=='bridge'
-          if(!skip) y += box.node.height/2
-          box.node.y = y
-          g.children(box.id).forEach(n => g.node(n).y = y)
-          if(!skip) y += box.node.height/2 + g.graph().nodesep
+        /* Set the node's new position */
+        bubbles.forEach(bubble => {
+          var y = bubble.y - bubble.height/2
+          bubble.forEach((box,i) => {
+            var skip = box.node.type == 'bridge' && i && bubble[i-1].node.type=='bridge'
+            if(!skip) y += box.node.height/2
+            box.node.y = y
+            g.children(box.id).forEach(n => g.node(n).y = y)
+            if(!skip) y += box.node.height/2 + g.graph().nodesep
+          })
         })
-      })
+      }
     }
-    var max = Math.max(...g.nodes().map(n => g.node(n).y+g.node(n).height/2))
-    var min = Math.min(...g.nodes().map(n => g.node(n).y-g.node(n).height/2))
-    g.nodes().forEach(n => g.node(n).y += 0-min)
-    {[].concat(...window.boxes).filter(n => n).forEach(box => box.y += 0-min)}
-    g.graph().height = max-min
-    yield
+    // yield
+    var y = g.graph().marginy||0
+    g.graph().grids.forEach(grid => {
+      var max = Math.max(...grid.nodes.map(n => g.node(n).y+g.node(n).height/2))
+      var min = Math.min(...grid.nodes.map(n => g.node(n).y-g.node(n).height/2))
+      grid.nodes.forEach(n => g.node(n).y += y-min)
+      /* debugging */{[].concat(...window.boxes).filter(n => n).forEach(box => box.y += y-min)}
+      y += max-min + g.graph().nodesep
+    })
+    g.graph().height = y + (g.graph().marginy||0) + g.graph().nodesep
   }
 }
 
@@ -421,7 +398,7 @@ function* layout(g){
   createGroups.time(g)
   fixCycles.time(g)
   ranking.time(g)
-  // createBridgeNodes.time(g)
+  createBridgeNodes.time(g)
   initialPositions.time(g)
   yield * order.time(g)
-} 
+}

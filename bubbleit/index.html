@@ -57,13 +57,14 @@
         stroke:#267F6F;
       }
       
-      /* AND nodes */
+      /* Logic nodes */
       .nodes g circle {
         fill:white;
-        stroke:#CC258F;
         stroke-width:2px;
-        r:2;
+        r:3;
       }
+      .nodes g[data-type="AND"] circle { stroke:red; }
+      .nodes g[data-type="OR"] circle { stroke:blue; }
 
       /* Bridge nodes */
       .nodes g[data-type="bridge"] circle {
