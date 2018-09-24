@@ -1,0 +1,77 @@
+text {
+  font-weight: 300;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serf;
+  font-size: 14px;
+  text-anchor: middle;
+  dominant-baseline:middle;
+}
+
+.groups rect { fill:none; }
+.groups rect[data-grouptype="concurrent"] {
+  stroke:#F2BEF2;
+  fill:none;
+  fill-opacity: 0;
+}
+
+/* Defaults */
+.nodes rect { stroke-width:1px; }
+.nodes line { stroke-width:3px; }
+.edges line, .edges path {
+  stroke-width: 1.5px;
+  fill:none;
+}
+
+/* Disabled */
+.nodes g[data-state="disabled"] rect { fill:#F0F0F0; }
+.nodes g[data-state="disabled"] text { fill:#AAA; }
+.nodes g[data-state="disabled"] line { stroke-opacity: 0.3; }
+.nodes g[data-state="disabled"]:hover line { stroke-opacity: 0.5; }
+.edges [data-type="pre"] { stroke: #DDD; }
+.edges [data-type="co"] { stroke: #B1F0F0; }
+.edges [data-type="concur"] { stroke: #F2BEF2; }
+
+/* Enabled */
+.nodes g[data-state="enabled"]:not(:hover) rect { fill:#DDD; }
+.nodes g[data-state="enabled"] text { fill:black; }
+.nodes g[data-state="enabled"] line { stroke-opacity: 0.6; }
+.nodes g[data-state="enabled"]:hover rect { fill-opacity: 0.5; stroke:none; }
+
+/* Active */
+.nodes g[data-state="active"] rect { fill-opacity:0.7; }
+.nodes g[data-state="active"] text { fill:white; }
+.edges [data-state="active"][data-type="co"]{ stroke: #40CFC3; }
+.edges [data-state="active"][data-type="concur"]{ stroke: #B551B5; }
+.edges [data-state="active"][data-type="pre"]{ stroke: #888; }
+
+/* Highlight */
+.nodes g.highlight rect{ stroke:#003bff; }
+.edges [data-type="pre"].highlight { stroke: #000000; }
+.edges [data-type="co"].highlight { stroke: #007876; }
+.edges [data-type="concur"].highlight { stroke: #4D004D; }
+
+/* Display Same Parent Groups */
+.groups rect[data-grouptype="same parent"] {
+  stroke:#267F6F;
+}
+
+/* Logic nodes */
+.nodes g circle {
+  fill:white;
+  stroke-width:2px;
+  r:3;
+}
+.nodes g[data-type="AND"] circle { stroke:purple; fill:purple;}
+.nodes g[data-type="OR"] circle { stroke:orange; fill:orange;}
+
+/* Bridge nodes */
+.nodes g[data-type="bridge"] circle {
+  stroke:#007876;
+}
+
+.routes line{
+  stroke:black;
+  /* stroke:#CCC; */
+  /* stroke:red; */
+  stroke-width:1;
+  stroke-opacity: .2;
+}

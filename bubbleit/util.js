@@ -39,3 +39,8 @@ function compareLevels(a,b,fn){
   // if they are not on the same course column, compare course column, other wise logic column
   return a[0] != b[0] ? fn(a[0],b[0]) : fn(a[1],b[1])
 }
+
+function isCourse(g,n){
+  var node = n.type ? n : g.node(n)
+  return node.type=='course'||node.type=='group'
+}

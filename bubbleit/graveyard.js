@@ -184,3 +184,39 @@ for(var gi = 0; gi < grids.length; gi++){
   //     y += g.node(n).height/2
   //   })
   // })
+
+
+function routesrender(g,r){
+  // r.nodes().filter(n => r.node(n).type=='exit').forEach(n => r.node(n).x+=3)
+  $routes.append('g').selectAll('line')
+    .data(r.edges())
+    .enter().append('line')
+      .attr('data-source',e => e.v)
+      .attr('data-target',e => e.w)
+      .attr('x1',e => r.node(e.v).x)
+      .attr('y1',e => r.node(e.v).y)
+      .attr('x2',e => r.node(e.w).x)
+      .attr('y2',e => r.node(e.w).y)
+  $routes.append('g').selectAll('circle')
+    .data(r.nodes())
+    .enter().append('circle')
+      .attr('data-id',n => n)
+      .attr('fill',n => ({route:'#CCC',course:'#00ffd0',logic:'red',bridge:'purple',exit:'none'})[r.node(n).type])
+      .attr('r',n => ({route:2,exit:1})[r.node(n).type]||2)
+      .attr('cx',n => r.node(n).x)
+      .attr('cy',n => r.node(n).y)
+  svg
+    .attr('width',g.graph().width)
+    .attr('height',g.graph().height)
+}
+
+
+/* Step through */
+{(async () => {
+  for(var nodes of layout.time(g)){
+    controller.render(g,nodes)
+    await new Promise(res => window.onclick = res)
+    // await new Promise(res => setTimeout(res,100))
+  }
+  controller.render(g)
+})()}
