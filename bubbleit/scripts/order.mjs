@@ -66,7 +66,6 @@ function createBoxes(g){
       sum += node.y * weight
       totalweight += weight
     })
-    this.id == '[MATH101 MATH110X]*' && console.log(this,this.influences.map(n => n.y))
     return this.y = sum/totalweight
   }
   function recursePreds(list,n){
@@ -100,7 +99,6 @@ function createBoxes(g){
       if(csuccs.length && csuccs.every(node => succsNodes.includes(node)) && csuccs.every(node => node.rank[0] == rank[0]+1)) canUseSuccs = true
       if(cpreds.length && cpreds.every(node => predsNodes.includes(node)) && cpreds.every(node => node.rank[0] == rank[0])) canUsePreds = true
       
-      given == '[MATH101 MATH110X]*' && console.log(canUsePreds,canUseSuccs,cpreds.length,csuccs.length)
       if(canUsePreds && cpreds.length == 1) return cpreds
       if(canUseSuccs && csuccs.length == 1) return csuccs
       if(canUseSuccs && canUsePreds) return csuccs.length >= cpreds.length ? csuccs : cpreds
@@ -137,7 +135,7 @@ function placeBox(box,bubbles){
     bubbles = other
 
     /* If no collisions exit the loop */
-    if(collisions.length == 0){ 
+    if(collisions.length == 0){
       done = true
       continue
     }

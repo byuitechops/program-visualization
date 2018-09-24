@@ -4,21 +4,17 @@ function createColorFn(g){
   return n => colors[n]!=undefined ? d3.interpolateRainbow(colors[n]/i-1) : '#999'
 }
 
-function predecessors(g,n,collection=[],first=true){
-  collection.push(`[data-id="${n}"]`)
-  if(first || g.node(n).type != 'course'){
-    collection.push(...g.inEdges(n).map(e => `[data-source="${e.v}"][data-target="${e.w}"]`))
-    g.predecessors(n).map(n => predecessors(g,n,collection,false))
-  }
-  return collection
-}
+function search(g,n,searchDown,collection,first=true){
+  collection = collection || {courses:[],edges:[],logics:[]}
 
-function successors(g,n,collection=[],first=true){
-  collection.push(`[data-id="${n}"]`)
-  if(first || (g.node(n).type != 'course'/*  && g.node(n).op != 'AND' */)){
-    collection.push(...g.outEdges(n).map(e => `[data-source="${e.v}"][data-target="${e.w}"]`))
-    g.successors(n).map(n => successors(g,n,collection,false))
+  if(g.node(n).type == 'logic') collection.logics.push(`[data-id="${n}"]`)
+  else if(!first) collection.courses.push(`[data-id="${n}"]`)
+
+  if(first || g.node(n).type != 'course'){
+    collection.edges.push(...g.outEdges(n).map(e => `[data-source="${e.v}"][data-target="${e.w}"]`))
+    g[searchDown ? 'successors' : 'predecessors'](n).map(n => search(g,n,searchDown,collection,false))
   }
+
   return collection
 }
 
@@ -51,15 +47,21 @@ function updateStates(g){
 export default class Renderer {
   constructor(svg){
     this.svg = svg//d3.select(svg)
-    this.$edges = this.svg.append('g').classed('edges',true)
-    this.$highlight = this.svg.append('g').classed('highlighter',true)
     this.$debug = this.svg.append('g').classed('debug',true)
+    this.$edges = this.svg.append('g').classed('edges',true)
     this.$nodes = this.svg.append('g').classed('nodes',true)
+    this.$highlight = this.svg.append('g').classed('highlighter',true)
+    this.$highlight.append('g').classed('courses',true)
+    this.$highlight.append('g').classed('edges',true)
+    this.$highlight.append('g').classed('logics',true)
     this.$groups = this.svg.append('g').classed('groups',true)
   }
   highlight(g,n,isOn){
+    var highlighties = search(g,n,true)
+    search(g,n,false,highlighties)
+
     var _highlight = this.$highlight.selectAll('use')
-      .data(isOn ? predecessors(g,n).concat(successors(g,n)) : [])
+      .data(isOn ? [].concat(highlighties.courses,highlighties.edges,highlighties.logics) : [])
     
     _highlight.enter().append('use')
       .merge(_highlight)

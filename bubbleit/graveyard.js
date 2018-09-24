@@ -220,3 +220,13 @@ function routesrender(g,r){
   }
   controller.render(g)
 })()}
+
+function predecessors(g,n,collection,first=true){
+  collection = collection || {courses:[],edges:[],logics:[]}
+  if(!first) collection.push(`[data-id="${n}"]`)
+  if(first || g.node(n).type != 'course'){
+    collection.push(...g.inEdges(n).map(e => `[data-source="${e.v}"][data-target="${e.w}"]`))
+    g.predecessors(n).map(n => predecessors(g,n,collection,false))
+  }
+  return collection
+}
