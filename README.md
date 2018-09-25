@@ -1,7 +1,9 @@
 # program-visualization
 An attempt to visualize an entire program (degree logic, requisite logic, catalog changes)
 
-[prototype](/prototype.pdf)
+[Hand drawn prototype](/prototype.pdf)
+
+[Alternative model](/bubbleit/index.html) *(straight lines and new algorithm)*
 
 ## Models
 [Accounting](/backtothestart/programs/accounting.html)
