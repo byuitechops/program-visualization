@@ -11,7 +11,7 @@ function search(g,n,searchDown,collection,first=true){
   else if(!first) collection.courses.push(`[data-id="${n}"]`)
 
   if(first || g.node(n).type != 'course'){
-    collection.edges.push(...g.outEdges(n).map(e => `[data-source="${e.v}"][data-target="${e.w}"]`))
+    collection.edges.push(...g[searchDown ? 'outEdges' : 'inEdges'](n).map(e => `[data-source="${e.v}"][data-target="${e.w}"]`))
     g[searchDown ? 'successors' : 'predecessors'](n).map(n => search(g,n,searchDown,collection,false))
   }
 
@@ -56,7 +56,12 @@ export default class Renderer {
     this.$highlight.append('g').classed('logics',true)
     this.$groups = this.svg.append('g').classed('groups',true)
   }
+
   highlight(g,n,isOn){
+    this.$nodes.classed('dim',isOn)
+    this.$edges.classed('dim',isOn)
+    d3.select(`[data-id="${n}"]`).classed('highlight',isOn)
+
     var highlighties = search(g,n,true)
     search(g,n,false,highlighties)
 
@@ -71,6 +76,7 @@ export default class Renderer {
       .each(sel => d3.select(sel).classed('highlight',false).attr('id',undefined))
       .remove()
   }
+
   renderNodes(g,nodes){
     nodes = nodes || g.nodes().filter(n => g.node(n).type!='group').filter(n => !isNaN(g.node(n).x) && !isNaN(g.node(n).y))
     var _nodes = this.$nodes.selectAll('g')
@@ -96,10 +102,17 @@ export default class Renderer {
       .text(n => g.node(n).type=='course'?n:'')
     courseNodes.append('line')
       .attr('x1',0)
-      .attr('y1',n => g.node(n).height-1.5)
+      .attr('y1',n => g.node(n).height+g.graph().nodesep/2)
       .attr('x2',n => g.node(n).width)
-      .attr('y2',n => g.node(n).height-1.5)
-      .attr('stroke',n => this.color(g.node(n).program))
+      .attr('y2',n => g.node(n).height+g.graph().nodesep/2)
+      .attr('stroke-width',g.graph().nodesep)
+      .attr('stroke','white')
+    // courseNodes.append('line')
+    //   .attr('x1',0)
+    //   .attr('y1',n => g.node(n).height-1.5)
+    //   .attr('x2',n => g.node(n).width)
+    //   .attr('y2',n => g.node(n).height-1.5)
+    //   .attr('stroke',n => this.color(g.node(n).program))
   
     /* New logic Nodes */
     enteringNodes.filter(n => !isCourse(g,n))

@@ -44,7 +44,9 @@ text {
 .edges [data-state="active"][data-type="pre"]{ stroke: #888; }
 
 /* Highlight */
-.nodes g.highlight rect{ stroke:#003bff; }
+.nodes.dim g:not(.highlight) rect { fill:#DDD; }
+.nodes.dim g:not(.highlight) circle { fill:none;stroke:none; }
+.edges.dim line:not(.highlight) { stroke:none; }
 .edges [data-type="pre"].highlight { stroke: #000000; }
 .edges [data-type="co"].highlight { stroke: #007876; }
 .edges [data-type="concur"].highlight { stroke: #4D004D; }
